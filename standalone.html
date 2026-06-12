@@ -1,0 +1,1434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RevOps Dashboard - Standalone</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>tailwind.config = { darkMode: 'class' }</script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        :root { --bg:#f8fafc;--bg2:#ffffff;--bg3:#f1f5f9;--tx:#0f172a;--tx2:#334155;--tx3:#64748b;--bd:#e2e8f0;--ac:#3b82f6;--ok:#22c55e;--wn:#f59e0b;--in:#8b5cf6; }
+        .dark { --bg:#0f172a;--bg2:#1e293b;--bg3:#334155;--tx:#f1f5f9;--tx2:#cbd5e1;--tx3:#94a3b8;--bd:#334155;--ac:#60a5fa; }
+        body { font-family:'Inter',system-ui,sans-serif; background:var(--bg); color:var(--tx); }
+        * { scrollbar-width:thin; scrollbar-color:var(--bd) transparent; }
+        .fade-in { animation: fadeIn .3s ease-out; }
+        @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes pulse-glow { 0%,100%{box-shadow:0 0 0 0 rgba(59,130,246,.3)} 50%{box-shadow:0 0 0 8px rgba(59,130,246,0)} }
+        .pulse-glow { animation:pulse-glow 2s infinite; }
+        .sidebar-open .sidebar-overlay { display:block; }
+        .sidebar-open .sidebar { transform:translateX(0)!important; pointer-events:auto!important; }
+        @media (max-width:1023px) { #sidebar { pointer-events:none; z-index:5!important; } header { z-index:60!important; } .sidebar-open header { z-index:35!important; } }
+        .dropdown-menu { display:none; position:absolute; left:0; right:0; z-index:40; }
+        .dropdown-menu.open { display:block; }
+        .dd-btn.active { border-color:var(--ac)!important; background:rgba(59,130,246,.08)!important; }
+        .sortable { cursor:pointer; user-select:none; }
+        .sortable:hover { color:var(--ac); }
+        .sortable .sort-arrow { opacity:0.4; display:inline-block; margin-left:4px; }
+        .sortable.asc .sort-arrow, .sortable.desc .sort-arrow { opacity:1; color:var(--ac); }
+        .pagination-btn { padding:4px 10px; border-radius:6px; font-size:12px; font-weight:600; cursor:pointer; transition:all .15s; border:1px solid var(--bd); color:var(--tx2); background:var(--bg2); }
+        .pagination-btn:hover { background:var(--bg3); }
+        .pagination-btn.active { background:var(--ac); color:white; border-color:var(--ac); }
+        .pagination-btn:disabled { opacity:.4; cursor:default; }
+        .alert-dismiss { cursor:pointer; opacity:.6; }
+        .alert-dismiss:hover { opacity:1; }
+        .comp-table td, .comp-table th { padding:6px 10px; text-align:left; font-size:12px; }
+        .comp-table th { font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--tx3); background:var(--bg3); }
+        .comp-table td { color:var(--tx2); border-bottom:1px solid var(--bd); }
+        .search-input { background:var(--bg3); border:1px solid var(--bd); color:var(--tx); padding:6px 10px; border-radius:8px; font-size:12px; width:100%; outline:none; }
+        .search-input:focus { border-color:var(--ac); }
+        ::placeholder { color:var(--tx3); }
+    </style>
+</head>
+<body class="min-h-screen">
+<div id="loadingOverlay" class="fixed inset-0 z-50 flex flex-col items-center justify-center" style="background:var(--bg);">
+    <div class="w-12 h-12 border-4 border-t-transparent rounded-full" style="border-color:var(--ac);border-top-color:transparent;animation:spin 1s linear infinite;"></div>
+    <p class="mt-3 text-xs font-medium" style="color:var(--tx3);">Generating 11,000 deals...</p>
+    <div class="mt-3 w-64 h-2 rounded-full" style="background:var(--bg3);overflow:hidden;"><div id="genProgress" class="h-full rounded-full" style="background:var(--ac);width:0%;transition:width .1s;"></div></div>
+</div>
+<div id="sidebarOverlay" class="fixed inset-0 bg-black/50 z-40 lg:hidden hidden" onclick="toggleSidebar()"></div>
+
+<div class="flex min-h-screen">
+<!-- Sidebar -->
+<aside id="sidebar" class="fixed lg:sticky top-0 left-0 w-72 h-screen z-50 lg:z-10 flex flex-col shrink-0 transition-transform duration-300 -translate-x-full lg:translate-x-0" style="background:var(--bg2);border-right:1px solid var(--bd);">
+    <div class="p-5 flex items-center gap-3" style="border-bottom:1px solid var(--bd);">
+        <div class="p-2 rounded-xl text-white" style="background:linear-gradient(135deg,#3b82f6,#6366f1);">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
+        </div>
+        <div><h1 class="font-extrabold text-sm" style="color:var(--tx);">RevOps Engine</h1><p class="text-[9px] font-semibold uppercase tracking-widest" style="color:var(--tx3);">Standalone</p></div>
+    </div>
+    <nav class="p-4 space-y-1.5" role="tablist">
+        <button onclick="switchTab('executive')" id="tab-executive" role="tab" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all" style="background:var(--ac);color:white;">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>Executive Summary</button>
+        <button onclick="switchTab('yoy')" id="tab-yoy" role="tab" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all" style="color:var(--tx3);">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>YoY Comparison</button>
+        <button onclick="switchTab('efficiency')" id="tab-efficiency" role="tab" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all" style="color:var(--tx3);">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"/></svg>CAC & Efficiency</button>
+        <button onclick="switchTab('products')" id="tab-products" role="tab" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all" style="color:var(--tx3);">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>Product & Account</button>
+        <button onclick="switchTab('recs')" id="tab-recs" role="tab" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all" style="color:var(--tx3);">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>Recommendations</button>
+        <button onclick="switchTab('table')" id="tab-table" role="tab" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all" style="color:var(--tx3);">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>Data Table</button>
+        <button onclick="switchTab('comparison')" id="tab-comparison" role="tab" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all" style="color:var(--tx3);">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>Comparison</button>
+    </nav>
+    <div class="p-4 flex-1 overflow-y-auto space-y-4" style="border-top:1px solid var(--bd);">
+        <p class="text-[10px] font-bold uppercase tracking-wider" style="color:var(--tx3);">Filters</p>
+        <div class="relative">
+            <label class="block text-xs font-semibold mb-1.5" style="color:var(--tx2);">Year</label>
+            <button onclick="toggleDD('dd-year')" id="dd-year-btn" class="dd-btn w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium text-left" style="background:var(--bg3);border:1px solid var(--bd);color:var(--tx);">
+                <span id="dd-year-label">All Years</span>
+                <svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </button>
+            <div id="dd-year" class="dropdown-menu mt-1 p-2 space-y-1 rounded-lg shadow-xl" style="background:var(--bg2);border:1px solid var(--bd);">
+                <label class="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer text-xs hover:bg-blue-50 dark:hover:bg-blue-900/20"><input type="checkbox" value="2024" onchange="handleMultiChange('year')" class="year-cb rounded" style="accent-color:var(--ac);"><span style="color:var(--tx2);">2024</span></label>
+                <label class="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer text-xs hover:bg-blue-50 dark:hover:bg-blue-900/20"><input type="checkbox" value="2025" onchange="handleMultiChange('year')" class="year-cb rounded" style="accent-color:var(--ac);"><span style="color:var(--tx2);">2025</span></label>
+                <label class="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer text-xs hover:bg-blue-50 dark:hover:bg-blue-900/20"><input type="checkbox" value="2026" onchange="handleMultiChange('year')" class="year-cb rounded" style="accent-color:var(--ac);"><span style="color:var(--tx2);">2026 YTD</span></label>
+            </div>
+        </div>
+        <div class="relative">
+            <label class="block text-xs font-semibold mb-1.5" style="color:var(--tx2);">Region</label>
+            <button onclick="toggleDD('dd-region')" id="dd-region-btn" class="dd-btn w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium text-left" style="background:var(--bg3);border:1px solid var(--bd);color:var(--tx);">
+                <span id="dd-region-label">All Regions</span>
+                <svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </button>
+            <div id="dd-region" class="dropdown-menu mt-1 p-2 space-y-1 rounded-lg shadow-xl" style="background:var(--bg2);border:1px solid var(--bd);">
+                <label class="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer text-xs hover:bg-blue-50 dark:hover:bg-blue-900/20"><input type="checkbox" value="North America" onchange="handleMultiChange('region')" class="region-cb rounded" style="accent-color:var(--ac);"><span style="color:var(--tx2);">North America</span></label>
+                <label class="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer text-xs hover:bg-blue-50 dark:hover:bg-blue-900/20"><input type="checkbox" value="EMEA" onchange="handleMultiChange('region')" class="region-cb rounded" style="accent-color:var(--ac);"><span style="color:var(--tx2);">EMEA</span></label>
+                <label class="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer text-xs hover:bg-blue-50 dark:hover:bg-blue-900/20"><input type="checkbox" value="APAC" onchange="handleMultiChange('region')" class="region-cb rounded" style="accent-color:var(--ac);"><span style="color:var(--tx2);">APAC</span></label>
+                <label class="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer text-xs hover:bg-blue-50 dark:hover:bg-blue-900/20"><input type="checkbox" value="LATAM" onchange="handleMultiChange('region')" class="region-cb rounded" style="accent-color:var(--ac);"><span style="color:var(--tx2);">LATAM</span></label>
+            </div>
+        </div>
+        <div class="relative">
+            <label class="block text-xs font-semibold mb-1.5" style="color:var(--tx2);">Marketing Channel</label>
+            <button onclick="toggleDD('dd-source')" id="dd-source-btn" class="dd-btn w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium text-left" style="background:var(--bg3);border:1px solid var(--bd);color:var(--tx);">
+                <span id="dd-source-label">All Channels</span>
+                <svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </button>
+            <div id="dd-source" class="dropdown-menu mt-1 p-2 space-y-1 rounded-lg shadow-xl" style="background:var(--bg2);border:1px solid var(--bd);">
+                <label class="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer text-xs hover:bg-blue-50 dark:hover:bg-blue-900/20"><input type="checkbox" value="LinkedIn Account-Based Ads" onchange="handleMultiChange('source')" class="source-cb rounded" style="accent-color:var(--ac);"><span style="color:var(--tx2);">LinkedIn Ads</span></label>
+                <label class="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer text-xs hover:bg-blue-50 dark:hover:bg-blue-900/20"><input type="checkbox" value="Google Search Intent SEO" onchange="handleMultiChange('source')" class="source-cb rounded" style="accent-color:var(--ac);"><span style="color:var(--tx2);">Google SEO</span></label>
+                <label class="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer text-xs hover:bg-blue-50 dark:hover:bg-blue-900/20"><input type="checkbox" value="Inbound / Partner Network" onchange="handleMultiChange('source')" class="source-cb rounded" style="accent-color:var(--ac);"><span style="color:var(--tx2);">Inbound / Partners</span></label>
+                <label class="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer text-xs hover:bg-blue-50 dark:hover:bg-blue-900/20"><input type="checkbox" value="Outbound Sales Development" onchange="handleMultiChange('source')" class="source-cb rounded" style="accent-color:var(--ac);"><span style="color:var(--tx2);">Outbound Sales</span></label>
+                <label class="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer text-xs hover:bg-blue-50 dark:hover:bg-blue-900/20"><input type="checkbox" value="Global Tech Summit" onchange="handleMultiChange('source')" class="source-cb rounded" style="accent-color:var(--ac);"><span style="color:var(--tx2);">Tech Summit</span></label>
+            </div>
+        </div>
+        <button onclick="clearFilters()" class="w-full py-2 rounded-lg text-xs font-semibold transition-all" style="border:1px solid var(--bd);color:var(--tx3);">Clear All Filters</button>
+    </div>
+    <div class="p-4 text-center" style="border-top:1px solid var(--bd);"><p class="text-[10px] font-semibold" style="color:var(--tx3);">RevOps Dashboard v3.0 · Standalone</p></div>
+</aside>
+
+<!-- Main -->
+<main class="flex-1 min-w-0">
+    <header class="sticky top-0 z-30 flex items-center justify-between gap-4 px-4 lg:px-8 py-4" style="background:var(--bg2);border-bottom:1px solid var(--bd);">
+        <div class="flex items-center gap-3">
+            <button onclick="toggleSidebar()" class="lg:hidden p-2 rounded-lg" style="color:var(--tx3);"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+            <div><p class="text-[10px] font-semibold uppercase tracking-widest" style="color:var(--tx3);">Enterprise Revenue Operations Hub</p><h2 id="mainTitle" class="text-lg font-extrabold" style="color:var(--tx);">Executive Revenue Summary</h2></div>
+        </div>
+        <div class="flex items-center gap-2">
+            <button onclick="toggleTheme()" class="px-3 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5" style="border:1px solid var(--bd);color:var(--tx2);">
+                <svg id="iconMoon" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+                <svg id="iconSun" class="w-3.5 h-3.5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+                <span id="themeLabel">Dark</span>
+            </button>
+            <button onclick="exportCSV()" class="px-3 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5" style="border:1px solid var(--bd);color:var(--tx2);">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>Export</button>
+            <div class="hidden sm:flex items-center gap-2 px-3 py-2 rounded-lg" style="border:1px solid var(--bd);">
+                <span class="w-2 h-2 rounded-full pulse-glow" style="background:var(--ok);"></span>
+                <span class="text-[10px] font-bold uppercase tracking-wider" style="color:var(--tx3);">Standalone</span>
+            </div>
+        </div>
+    </header>
+
+    <div class="p-4 lg:p-8">
+        <!-- Filter Badges -->
+        <div id="filterBadges" class="hidden flex-wrap items-center gap-2 mb-4 p-3 rounded-xl" style="background:var(--bg3);border:1px solid var(--bd);">
+            <span class="text-[10px] font-bold uppercase tracking-wider" style="color:var(--tx3);">Active:</span>
+            <div id="badgesList" class="flex flex-wrap gap-2"></div>
+            <button onclick="clearFilters()" class="ml-auto text-[10px] font-bold px-2 py-1 rounded" style="color:#ef4444;">✕ Clear All</button>
+        </div>
+
+        <!-- KPIs -->
+        <section class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <div class="p-4 rounded-xl" style="background:var(--bg2);border:1px solid var(--bd);"><p class="text-[10px] font-semibold uppercase tracking-wider" style="color:var(--tx3);">Net Revenue</p><h3 class="text-xl lg:text-2xl font-black mt-1" style="color:var(--tx);" id="kpiRevenue">—</h3></div>
+            <div class="p-4 rounded-xl" style="background:var(--bg2);border:1px solid var(--bd);"><p class="text-[10px] font-semibold uppercase tracking-wider" style="color:var(--tx3);">Gross Margin</p><h3 class="text-xl lg:text-2xl font-black mt-1" style="color:var(--ok);" id="kpiMargin">—</h3></div>
+            <div class="p-4 rounded-xl" style="background:var(--bg2);border:1px solid var(--bd);"><p class="text-[10px] font-semibold uppercase tracking-wider" style="color:var(--tx3);">Total CAC</p><h3 class="text-xl lg:text-2xl font-black mt-1" style="color:var(--wn);" id="kpiCAC">—</h3></div>
+            <div class="p-4 rounded-xl" style="background:var(--bg2);border:1px solid var(--bd);"><p class="text-[10px] font-semibold uppercase tracking-wider" style="color:var(--tx3);">Net Profit</p><h3 class="text-xl lg:text-2xl font-black mt-1" style="color:var(--in);" id="kpiProfit">—</h3></div>
+        </section>
+
+        <!-- Insight Banner -->
+        <div class="p-4 rounded-xl mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3" style="background:linear-gradient(135deg,#1e3a5f,#0f172a);color:white;">
+            <div class="space-y-1 min-w-0"><span class="text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full" style="background:rgba(59,130,246,.2);color:#93c5fd;">📊 Smart Insight</span><p class="text-sm" id="insightText" style="color:#cbd5e1;">Loading...</p></div>
+            <div class="shrink-0 px-4 py-2 rounded-lg text-center" style="background:rgba(255,255,255,.1);"><div class="text-[10px] font-semibold" style="color:#94a3b8;">Records</div><div class="text-lg font-black" style="color:#93c5fd;" id="rowCount">—</div></div>
+        </div>
+
+        <!-- Threshold Alert Bar -->
+        <div id="thresholdBar" class="hidden flex-col gap-2 mb-4"></div>
+
+        <!-- Tab: Executive -->
+        <div id="content-executive" class="tab-content fade-in">
+            <div class="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-6">
+                <div class="xl:col-span-2 p-5 rounded-xl" style="background:var(--bg2);border:1px solid var(--bd);">
+                    <div class="flex justify-between items-center mb-4"><h3 class="text-sm font-bold" style="color:var(--tx);">Monthly Revenue vs Profit</h3><span class="text-[9px] font-bold px-2 py-0.5 rounded" style="background:var(--bg3);color:var(--tx3);">Click to filter ↓</span></div>
+                    <div style="height:280px;"><canvas id="chartTrend"></canvas></div>
+                </div>
+                <div class="p-5 rounded-xl" style="background:var(--bg2);border:1px solid var(--bd);">
+                    <div class="flex justify-between items-center mb-4"><h3 class="text-sm font-bold" style="color:var(--tx);">Regional Margin %</h3><span class="text-[9px] font-bold px-2 py-0.5 rounded" style="background:var(--bg3);color:var(--tx3);">Click to filter ↓</span></div>
+                    <div style="height:280px;"><canvas id="chartRegion"></canvas></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab: YoY -->
+        <div id="content-yoy" class="tab-content hidden fade-in">
+            <div class="p-5 rounded-xl" style="background:var(--bg2);border:1px solid var(--bd);">
+                <h3 class="text-sm font-bold mb-2" style="color:var(--tx);" id="yoyTitle">Year-over-Year: Revenue & Profit Comparison</h3>
+                <p class="text-xs mb-4" style="color:var(--tx3);">Side-by-side full-year monthly comparison. Filter by region/channel for deeper analysis.</p>
+                <div style="height:380px;"><canvas id="chartYoY"></canvas></div>
+            </div>
+            <div id="yoySummary" class="mt-4 p-4 rounded-xl" style="background:var(--bg3);border:1px solid var(--bd);"></div>
+        </div>
+
+        <!-- Tab: Efficiency -->
+        <div id="content-efficiency" class="tab-content hidden fade-in">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="p-5 rounded-xl" style="background:var(--bg2);border:1px solid var(--bd);"><h3 class="text-sm font-bold mb-4" style="color:var(--tx);">Channel ROI (CAC vs Revenue)</h3><div style="height:300px;"><canvas id="chartScatter"></canvas></div></div>
+                <div class="p-5 rounded-xl" style="background:var(--bg2);border:1px solid var(--bd);">
+                    <div class="flex justify-between items-center mb-4"><h3 class="text-sm font-bold" style="color:var(--tx);">Funnel Volume by Channel</h3><span class="text-[9px] font-bold px-2 py-0.5 rounded" style="background:var(--bg3);color:var(--tx3);">Click to filter ↓</span></div>
+                    <div style="height:300px;"><canvas id="chartFunnel"></canvas></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab: Products -->
+        <div id="content-products" class="tab-content hidden fade-in">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="p-5 rounded-xl" style="background:var(--bg2);border:1px solid var(--bd);"><h3 class="text-sm font-bold mb-4" style="color:var(--tx);">Top 5 Products by Profit</h3><div style="height:300px;"><canvas id="chartProducts"></canvas></div></div>
+                <div class="p-5 rounded-xl" style="background:var(--bg2);border:1px solid var(--bd);"><h3 class="text-sm font-bold mb-4" style="color:var(--tx);">Account Tier Revenue Share</h3><div style="height:300px;"><canvas id="chartTiers"></canvas></div></div>
+            </div>
+        </div>
+
+        <!-- Tab: Recommendations -->
+        <div id="content-recs" class="tab-content hidden fade-in">
+            <div id="recsList" class="space-y-4"></div>
+        </div>
+
+        <!-- Tab: Data Table -->
+        <div id="content-table" class="tab-content hidden fade-in">
+            <div class="p-5 rounded-xl" style="background:var(--bg2);border:1px solid var(--bd);">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                    <h3 class="text-sm font-bold" style="color:var(--tx);">Deal Records</h3>
+                    <div class="flex items-center gap-3">
+                        <input type="text" id="tableSearch" class="search-input" placeholder="Search deals..." oninput="loadTable()">
+                        <span id="tableTotal" class="text-xs font-semibold" style="color:var(--tx3);">—</span>
+                    </div>
+                </div>
+                <div style="overflow-x:auto;">
+                    <table class="w-full text-xs" style="border-collapse:separate;border-spacing:0;">
+                        <thead>
+                            <tr style="background:var(--bg3);">
+                                <th class="sortable px-3 py-2 text-left font-bold uppercase tracking-wider" style="color:var(--tx3);" onclick="sortTable('date')">Date <span class="sort-arrow">↕</span></th>
+                                <th class="sortable px-3 py-2 text-left font-bold uppercase tracking-wider" style="color:var(--tx3);" onclick="sortTable('company')">Company <span class="sort-arrow">↕</span></th>
+                                <th class="sortable px-3 py-2 text-left font-bold uppercase tracking-wider" style="color:var(--tx3);" onclick="sortTable('region')">Region <span class="sort-arrow">↕</span></th>
+                                <th class="sortable px-3 py-2 text-left font-bold uppercase tracking-wider" style="color:var(--tx3);" onclick="sortTable('product')">Product <span class="sort-arrow">↕</span></th>
+                                <th class="sortable px-3 py-2 text-right font-bold uppercase tracking-wider" style="color:var(--tx3);" onclick="sortTable('qty')">Qty <span class="sort-arrow">↕</span></th>
+                                <th class="sortable px-3 py-2 text-right font-bold uppercase tracking-wider" style="color:var(--tx3);" onclick="sortTable('revenue')">Revenue <span class="sort-arrow">↕</span></th>
+                                <th class="sortable px-3 py-2 text-right font-bold uppercase tracking-wider" style="color:var(--tx3);" onclick="sortTable('cac')">CAC <span class="sort-arrow">↕</span></th>
+                                <th class="sortable px-3 py-2 text-right font-bold uppercase tracking-wider" style="color:var(--tx3);" onclick="sortTable('profit')">Profit <span class="sort-arrow">↕</span></th>
+                                <th class="sortable px-3 py-2 text-left font-bold uppercase tracking-wider" style="color:var(--tx3);" onclick="sortTable('source')">Source <span class="sort-arrow">↕</span></th>
+                            </tr>
+                        </thead>
+                        <tbody id="tableBody"></tbody>
+                    </table>
+                </div>
+                <div id="tablePagination" class="flex items-center justify-center gap-2 mt-4 flex-wrap"></div>
+            </div>
+        </div>
+
+        <!-- Tab: Comparison -->
+        <div id="content-comparison" class="tab-content hidden fade-in">
+            <div class="p-5 rounded-xl" style="background:var(--bg2);border:1px solid var(--bd);">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                    <h3 class="text-sm font-bold" style="color:var(--tx);">Region Comparison</h3>
+                    <div class="flex items-center gap-3">
+                        <label class="text-xs font-semibold" style="color:var(--tx2);">Compare:</label>
+                        <select id="compRegion1" class="search-input w-auto" onchange="loadComparison()"></select>
+                        <span class="text-xs" style="color:var(--tx3);">vs</span>
+                        <select id="compRegion2" class="search-input w-auto" onchange="loadComparison()"></select>
+                    </div>
+                </div>
+                <div style="height:320px;"><canvas id="chartComparison"></canvas></div>
+            </div>
+            <div id="compTableContainer" class="mt-4 p-5 rounded-xl" style="background:var(--bg2);border:1px solid var(--bd);">
+                <h3 class="text-sm font-bold mb-3" style="color:var(--tx);">Raw Numbers</h3>
+                <div style="overflow-x:auto;">
+                    <table class="comp-table w-full">
+                        <thead><tr><th>Metric</th><th id="compHeader1">Region 1</th><th id="compHeader2">Region 2</th><th>Difference</th></tr></thead>
+                        <tbody id="compTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</main>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════════
+// 1. SEEDED PRNG (Mulberry32 — simple, deterministic)
+// ═══════════════════════════════════════════════════════════════════════════════
+function mulberry32(a) {
+    return function() {
+        a |= 0; a = a + 0x6D2B79F5 | 0;
+        var t = Math.imul(a ^ a >>> 15, 1 | a);
+        t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+        return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+}
+
+function seededRandom(seed) {
+    const rng = mulberry32(seed);
+    return {
+        random: () => rng(),
+        choice: (arr) => arr[Math.floor(rng() * arr.length)],
+        choices: (arr, weights, k) => {
+            const result = [];
+            const cumWeights = [];
+            let sum = 0;
+            for (let w of weights) { sum += w; cumWeights.push(sum); }
+            for (let i = 0; i < (k || 1); i++) {
+                const r = rng() * sum;
+                for (let j = 0; j < cumWeights.length; j++) {
+                    if (r < cumWeights[j]) { result.push(arr[j]); break; }
+                }
+            }
+            return result;
+        },
+        uniform: (a, b) => a + rng() * (b - a),
+        randint: (min, max) => Math.floor(rng() * (max - min + 1)) + min,
+    };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 2. EMBEDDED DATA
+// ═══════════════════════════════════════════════════════════════════════════════
+const PRODUCTS = [
+    { code: "PROD_001", name: "Microsoft Azure Enterprise Suite",         category: "Cloud Infrastructure",      cost: 2500, price: 4500 },
+    { code: "PROD_002", name: "Amazon AWS Cloud Infrastructure",            category: "Cloud Infrastructure",      cost: 4000, price: 7500 },
+    { code: "PROD_003", name: "Google Workspace Enterprise",                category: "Productivity & SaaS",       cost: 300,  price: 800  },
+    { code: "PROD_004", name: "Salesforce Sales Cloud",                     category: "CRM & Sales Tech",          cost: 1200, price: 2400 },
+    { code: "PROD_005", name: "HubSpot Marketing Hub Pro",                  category: "Marketing Automation",      cost: 600,  price: 1300 },
+    { code: "PROD_006", name: "CrowdStrike Falcon Endpoint Security",      category: "Cybersecurity",             cost: 800,  price: 1800 },
+    { code: "PROD_007", name: "Snowflake Data Cloud",                       category: "Data Infrastructure",       cost: 1500, price: 3200 },
+    { code: "PROD_008", name: "Datadog Infrastructure Monitoring",          category: "Observability & Devops",    cost: 400,  price: 950  },
+    { code: "PROD_009", name: "Cisco Meraki Networking",                    category: "Networking Hardware",       cost: 1100, price: 2200 },
+    { code: "PROD_010", name: "SAP S/4HANA ERP",                            category: "Enterprise ERP",            cost: 5000, price: 9800 },
+];
+
+const COMPANIES = [
+    { name: "Walmart",              region: "North America", industry: "Retail & E-Commerce",  tier: "Strategic Enterprise" },
+    { name: "Amazon",               region: "North America", industry: "Retail & E-Commerce",  tier: "Strategic Enterprise" },
+    { name: "Apple",                region: "North America", industry: "Manufacturing",        tier: "Strategic Enterprise" },
+    { name: "CVS Health",           region: "EMEA",          industry: "Healthcare & Pharma",  tier: "Mid-Market Enterprise" },
+    { name: "UnitedHealth Group",   region: "North America", industry: "Healthcare & Pharma",  tier: "Strategic Enterprise" },
+    { name: "ExxonMobil",           region: "EMEA",          industry: "Logistics & Energy",   tier: "Strategic Enterprise" },
+    { name: "Berkshire Hathaway",   region: "APAC",          industry: "Financial Services",   tier: "Strategic Enterprise" },
+    { name: "Alphabet",             region: "North America", industry: "Retail & E-Commerce",  tier: "Strategic Enterprise" },
+    { name: "McKesson",             region: "APAC",          industry: "Healthcare & Pharma",  tier: "Mid-Market Enterprise" },
+    { name: "AmerisourceBergen",    region: "LATAM",         industry: "Healthcare & Pharma",  tier: "Mid-Market Enterprise" },
+    { name: "Costco Wholesale",     region: "APAC",          industry: "Retail & E-Commerce",  tier: "Strategic Enterprise" },
+    { name: "Microsoft",            region: "North America", industry: "Financial Services",   tier: "Strategic Enterprise" },
+    { name: "Cardinal Health",      region: "LATAM",         industry: "Healthcare & Pharma",  tier: "SMB Scaling" },
+    { name: "Cigna",                region: "EMEA",          industry: "Healthcare & Pharma",  tier: "Mid-Market Enterprise" },
+    { name: "Marathon Petroleum",   region: "LATAM",         industry: "Logistics & Energy",   tier: "Strategic Enterprise" },
+    { name: "Phillips 66",          region: "APAC",          industry: "Logistics & Energy",   tier: "Mid-Market Enterprise" },
+    { name: "Valero Energy",        region: "LATAM",         industry: "Logistics & Energy",   tier: "Strategic Enterprise" },
+    { name: "Ford Motor",           region: "EMEA",          industry: "Manufacturing",        tier: "Mid-Market Enterprise" },
+    { name: "The Home Depot",       region: "North America", industry: "Retail & E-Commerce",  tier: "Strategic Enterprise" },
+    { name: "General Motors",       region: "APAC",          industry: "Manufacturing",        tier: "Strategic Enterprise" },
+    { name: "Elevance Health",      region: "EMEA",          industry: "Healthcare & Pharma",  tier: "Strategic Enterprise" },
+    { name: "JPMorgan Chase",       region: "North America", industry: "Financial Services",   tier: "Strategic Enterprise" },
+    { name: "Chevron",              region: "APAC",          industry: "Logistics & Energy",   tier: "Strategic Enterprise" },
+    { name: "Kroger",               region: "LATAM",         industry: "Retail & E-Commerce",  tier: "Mid-Market Enterprise" },
+    { name: "Centene",              region: "EMEA",          industry: "Healthcare & Pharma",  tier: "Mid-Market Enterprise" },
+    { name: "Verizon Communications", region: "North America", industry: "Financial Services",   tier: "Strategic Enterprise" },
+    { name: "Fannie Mae",           region: "EMEA",          industry: "Financial Services",   tier: "Mid-Market Enterprise" },
+    { name: "Comcast",              region: "APAC",          industry: "Financial Services",   tier: "SMB Scaling" },
+    { name: "Citigroup",            region: "APAC",          industry: "Financial Services",   tier: "Mid-Market Enterprise" },
+    { name: "Meta Platforms",       region: "North America", industry: "Retail & E-Commerce",  tier: "Strategic Enterprise" },
+];
+
+const SOURCES = [
+    { name: "LinkedIn Account-Based Ads", cac: 850 },
+    { name: "Google Search Intent SEO",   cac: 150 },
+    { name: "Inbound / Partner Network",  cac: 75 },
+    { name: "Outbound Sales Development", cac: 500 },
+    { name: "Global Tech Summit",         cac: 1200 },
+];
+
+const QUANTITIES = [1, 2, 5, 10, 25];
+const QTY_WEIGHTS = [0.4, 0.3, 0.18, 0.09, 0.03];
+const DISCOUNTS = [0.0, 0.05, 0.10, 0.15, 0.25];
+const DISC_WEIGHTS = [0.55, 0.20, 0.13, 0.09, 0.03];
+
+const SEASONAL = { 1: 0.82, 2: 0.85, 3: 0.92, 4: 0.95, 5: 1.0, 6: 1.05, 7: 0.98, 8: 0.95, 9: 1.08, 10: 1.15, 11: 1.25, 12: 1.30 };
+
+const START_DATE = new Date(2024, 0, 1);
+const END_DATE = new Date(2026, 5, 30);
+const DAYS_RANGE = Math.floor((END_DATE - START_DATE) / (1000 * 60 * 60 * 24)); // 911 days
+const TOTAL_DEALS = 11000;
+const SEED = 42;
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 3. GENERATE DEALS
+// ═══════════════════════════════════════════════════════════════════════════════
+function generateAllDeals() {
+    const rng = seededRandom(SEED);
+    const deals = [];
+    const progressEl = document.getElementById('genProgress');
+    const batchSize = Math.max(1, Math.floor(TOTAL_DEALS / 100));
+
+    for (let i = 0; i < TOTAL_DEALS; i++) {
+        // Pick components
+        const product = rng.choice(PRODUCTS);
+        const company = rng.choice(COMPANIES);
+        const source = rng.choice(SOURCES);
+
+        // Qty and discount via weighted random
+        const qty = rng.choices(QUANTITIES, QTY_WEIGHTS)[0];
+        const disc = rng.choices(DISCOUNTS, DISC_WEIGHTS)[0];
+
+        // Random date
+        const randDays = rng.randint(0, DAYS_RANGE);
+        const dealDate = new Date(START_DATE);
+        dealDate.setDate(dealDate.getDate() + randDays);
+
+        // Seasonal multiplier
+        const month = dealDate.getMonth() + 1; // JS months are 0-indexed
+        const seasonMult = SEASONAL[month] || 1.0;
+        const noise = 1.0 + rng.uniform(-0.08, 0.08);
+        const price = Math.round(product.price * seasonMult * noise);
+        const cost = Math.round(product.cost * (1.0 + rng.uniform(-0.03, 0.03)));
+
+        // Financial calculations
+        const grossRev = qty * price;
+        const discountAmt = Math.round(grossRev * disc * 100) / 100;
+        const netRev = Math.round((grossRev - discountAmt) * 100) / 100;
+        const totalCost = qty * cost;
+        const cacValue = source.cac;
+        const opexOverhead = Math.round(netRev * 0.03 * 100) / 100;
+        const netProfit = Math.round((netRev - totalCost - cacValue - opexOverhead) * 100) / 100;
+
+        const dateStr = dealDate.toISOString().split('T')[0];
+        const year = dealDate.getFullYear();
+        const monthStr = String(month).padStart(2, '0');
+        const ym = year + '-' + monthStr;
+
+        deals.push({
+            // Identifiers
+            product_code: product.code,
+            product_name: product.name,
+            product_category: product.category,
+            company_name: company.name,
+            region: company.region,
+            industry: company.industry,
+            tier: company.tier,
+            source_name: source.name,
+            // Financial
+            qty,
+            discount: disc,
+            gross_rev: grossRev,
+            discount_amt: discountAmt,
+            net_rev: netRev,
+            total_cost: totalCost,
+            cac_value: cacValue,
+            opex_overhead: opexOverhead,
+            net_profit: netProfit,
+            // Date
+            date: dateStr,
+            year: year,
+            month: month,
+            ym: ym,
+        });
+
+        // Update progress
+        if (i % batchSize === 0) {
+            progressEl.style.width = ((i / TOTAL_DEALS) * 100) + '%';
+        }
+    }
+    progressEl.style.width = '100%';
+    return deals;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 4. GLOBAL STATE
+// ═══════════════════════════════════════════════════════════════════════════════
+let ALL_DEALS;
+let charts = {};
+let isDark = localStorage.getItem('revops-theme') === 'dark';
+let chartFilters = { region: null, month: null, source: null };
+const MONTHS = ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function fmtMonth(ym) { const [y,m] = ym.split('-'); return MONTHS[parseInt(m)] + ' ' + y; }
+
+let tableState = { page:1, pageSize:20, sortCol:null, sortDir:'asc', data:[], total:0, search:'' };
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 5. FILTER LOGIC
+// ═══════════════════════════════════════════════════════════════════════════════
+function getFilteredDeals() {
+    let filtered = ALL_DEALS;
+
+    // Year filter
+    const years = Array.from(document.querySelectorAll('.year-cb:checked')).map(c => parseInt(c.value));
+    if (years.length > 0) {
+        filtered = filtered.filter(d => years.includes(d.year));
+    }
+
+    // Region filter (from multi-select dropdowns)
+    const regions = Array.from(document.querySelectorAll('.region-cb:checked')).map(c => c.value);
+    if (regions.length > 0) {
+        filtered = filtered.filter(d => regions.includes(d.region));
+    }
+
+    // Chart click region filter
+    if (chartFilters.region) {
+        filtered = filtered.filter(d => d.region === chartFilters.region);
+    }
+
+    // Source filter (from multi-select)
+    const sources = Array.from(document.querySelectorAll('.source-cb:checked')).map(c => c.value);
+    if (sources.length > 0) {
+        filtered = filtered.filter(d => sources.includes(d.source_name));
+    }
+
+    // Chart click source filter
+    if (chartFilters.source) {
+        filtered = filtered.filter(d => d.source_name === chartFilters.source);
+    }
+
+    // Chart click month filter
+    if (chartFilters.month) {
+        filtered = filtered.filter(d => d.ym === chartFilters.month);
+    }
+
+    return filtered;
+}
+
+function getFilters() {
+    const f = {};
+    const years = Array.from(document.querySelectorAll('.year-cb:checked')).map(c => c.value);
+    if (years.length) f.date_from = years.join(',');
+    const regions = Array.from(document.querySelectorAll('.region-cb:checked')).map(c => c.value);
+    if (regions.length) f.region = regions.join(',');
+    if (chartFilters.region) f.region = chartFilters.region;
+    const sources = Array.from(document.querySelectorAll('.source-cb:checked')).map(c => c.value);
+    if (sources.length) f.source = sources.join(',');
+    if (chartFilters.source) f.source = chartFilters.source;
+    if (chartFilters.month) {
+        const [yr,m] = chartFilters.month.split('-');
+        const lastDay = new Date(parseInt(yr), parseInt(m), 0).getDate();
+        f.date_from = chartFilters.month+'-01';
+        f.date_to = chartFilters.month+'-'+String(lastDay).padStart(2,'0');
+    }
+    return f;
+}
+
+function clearFilters() {
+    document.querySelectorAll('.year-cb,.region-cb,.source-cb').forEach(c => c.checked = false);
+    document.getElementById('dd-year-label').textContent = 'All Years';
+    document.getElementById('dd-region-label').textContent = 'All Regions';
+    document.getElementById('dd-source-label').textContent = 'All Channels';
+    document.getElementById('dd-year-btn').classList.remove('active');
+    document.getElementById('dd-region-btn').classList.remove('active');
+    document.getElementById('dd-source-btn').classList.remove('active');
+    chartFilters = { region:null, month:null, source:null };
+    renderBadges(); refresh();
+}
+
+function refresh() { loadKPIs(); loadThresholds(); loadCharts(); }
+
+function toggleChartFilter(type, value) {
+    chartFilters[type] = chartFilters[type] === value ? null : value;
+    renderBadges(); refresh();
+}
+
+function renderBadges() {
+    const c = document.getElementById('filterBadges');
+    const l = document.getElementById('badgesList');
+    l.innerHTML = ''; let has = false;
+    const years = Array.from(document.querySelectorAll('.year-cb:checked')).map(c=>c.value);
+    years.forEach(y => { has=true; l.appendChild(badge('Year', y, ()=>{document.querySelector('.year-cb[value="'+y+'"]').checked=false;handleMultiChange('year');})); });
+    const regions = Array.from(document.querySelectorAll('.region-cb:checked')).map(c=>c.value);
+    regions.forEach(r => { has=true; l.appendChild(badge('Region', r, ()=>{document.querySelector('.region-cb[value="'+r+'"]').checked=false;handleMultiChange('region');})); });
+    const sources = Array.from(document.querySelectorAll('.source-cb:checked')).map(c=>c.value);
+    sources.forEach(s => { has=true; l.appendChild(badge('Channel', s, ()=>{document.querySelector('.source-cb[value="'+s+'"]').checked=false;handleMultiChange('source');})); });
+    if (chartFilters.region && !regions.includes(chartFilters.region)) { has=true; l.appendChild(badge('Region', chartFilters.region, ()=>{chartFilters.region=null;renderBadges();refresh();})); }
+    if (chartFilters.source && !sources.includes(chartFilters.source)) { has=true; l.appendChild(badge('Channel', chartFilters.source, ()=>{chartFilters.source=null;renderBadges();refresh();})); }
+    if (chartFilters.month) { has=true; l.appendChild(badge('Month', fmtMonth(chartFilters.month), ()=>{chartFilters.month=null;renderBadges();refresh();})); }
+    c.classList.toggle('hidden', !has); c.classList.toggle('flex', has);
+}
+
+function badge(type, val, onRemove) {
+    const d = document.createElement('div'); d.className='flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold text-white'; d.style.background='var(--ac)';
+    d.innerHTML='<span class="opacity-70 text-[9px] uppercase">'+type+':</span> <span>'+val+'</span>';
+    const b = document.createElement('button'); b.textContent='✕'; b.className='ml-1 hover:opacity-70 text-[10px]'; b.onclick=e=>{e.stopPropagation();onRemove();};
+    d.appendChild(b); return d;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 6. THEME, SIDEBAR, DROPDOWNS, TABS
+// ═══════════════════════════════════════════════════════════════════════════════
+function initTheme() { if (isDark) document.documentElement.classList.add('dark'); updateThemeUI(); }
+function toggleTheme() { isDark = !isDark; localStorage.setItem('revops-theme', isDark?'dark':'light'); document.documentElement.classList.toggle('dark', isDark); updateThemeUI(); refresh(); }
+function updateThemeUI() { document.getElementById('themeLabel').textContent = isDark?'Light':'Dark'; document.getElementById('iconMoon').classList.toggle('hidden',isDark); document.getElementById('iconSun').classList.toggle('hidden',!isDark); }
+
+function toggleSidebar() { document.body.classList.toggle('sidebar-open'); }
+document.addEventListener('keydown', e => { if (e.key==='Escape') document.body.classList.remove('sidebar-open'); });
+window.addEventListener('click', e => {    ['dd-year','dd-region','dd-source'].forEach(id => {const dd=document.getElementById(id); const btn=document.getElementById(id+'-btn'); if(dd && !dd.contains(e.target) && !btn.contains(e.target)) dd.classList.remove('open'); }); });
+
+function toggleDD(id) { document.getElementById(id).classList.toggle('open'); }
+function handleMultiChange(type) {
+    const cls = type === 'year' ? '.year-cb' : type === 'region' ? '.region-cb' : '.source-cb';
+    const checked = Array.from(document.querySelectorAll(cls + ':checked')).map(c => c.value);
+    const label = document.getElementById('dd-' + type + '-label');
+    const defaults = { year: 'All Years', region: 'All Regions', source: 'All Channels' };
+    const plurals = { year: 'Years', region: 'Regions', source: 'Channels' };
+    if (checked.length === 0) label.textContent = defaults[type];
+    else if (checked.length <= 2) label.textContent = checked.join(', ');
+    else label.textContent = checked.length + ' ' + plurals[type];
+    document.getElementById('dd-' + type + '-btn').classList.toggle('active', checked.length > 0);
+    refresh();
+}
+
+const TITLES = { executive:'Executive Revenue Summary', yoy:'Year-over-Year Comparison', efficiency:'CAC & Efficiency Analysis', products:'Product & Account Depth', recs:'Data-Driven Recommendations', table:'Deal Records Data Table', comparison:'Region Comparison Mode' };
+function switchTab(name) {
+    document.querySelectorAll('[role="tab"]').forEach(b => { b.setAttribute('aria-selected','false'); b.style.background='transparent'; b.style.color='var(--tx3)'; });
+    document.getElementById('tab-'+name).setAttribute('aria-selected','true');
+    document.getElementById('tab-'+name).style.background='var(--ac)';
+    document.getElementById('tab-'+name).style.color='white';
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+    const c = document.getElementById('content-'+name); c.classList.remove('hidden'); c.classList.add('fade-in');
+    document.getElementById('mainTitle').textContent = TITLES[name];
+    document.body.classList.remove('sidebar-open');
+    loadCharts();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 7. KPI COMPUTATION (client-side)
+// ═══════════════════════════════════════════════════════════════════════════════
+function loadKPIs() {
+    const deals = getFilteredDeals();
+    const count = deals.length;
+    let totalRevenue = 0, totalCost = 0, totalCAC = 0, totalOpex = 0, totalProfit = 0;
+    for (const d of deals) {
+        totalRevenue += d.net_rev;
+        totalCost += d.total_cost;
+        totalCAC += d.cac_value;
+        totalOpex += d.opex_overhead;
+        totalProfit += d.net_profit;
+    }
+    const avgMargin = totalRevenue ? (totalProfit / totalRevenue * 100) : 0;
+
+    document.getElementById('kpiRevenue').textContent = '$'+(totalRevenue/1e6).toFixed(1)+'M';
+    document.getElementById('kpiMargin').textContent = avgMargin.toFixed(1)+'%';
+    document.getElementById('kpiCAC').textContent = '$'+(totalCAC/1e6).toFixed(1)+'M';
+    document.getElementById('kpiProfit').textContent = '$'+(totalProfit/1e6).toFixed(1)+'M';
+    document.getElementById('rowCount').textContent = count.toLocaleString();
+
+    generateInsight({ total_revenue: totalRevenue, avg_margin: avgMargin, total_cac: totalCAC, net_profit: totalProfit, row_count: count });
+}
+
+function generateInsight(d) {
+    const el = document.getElementById('insightText');
+    if (!d.row_count) { el.innerHTML='No matching records.'; return; }
+    let msg = '<strong>'+d.row_count.toLocaleString()+'</strong> deals · <strong>$'+(d.total_revenue/1e6).toFixed(2)+'M</strong> revenue · <strong>$'+(d.net_profit/1e6).toFixed(2)+'M</strong> profit ('+d.avg_margin.toFixed(1)+'% margin) · <strong>$'+(d.total_cac/1e3).toFixed(0)+'K</strong> CAC.';
+    if (d.avg_margin > 40) msg += ' <span style="color:#4ade80;">✅ Excellent margins.</span>';
+    else if (d.avg_margin > 30) msg += ' <span style="color:#fbbf24;">⚠️ Review CAC spend.</span>';
+    else msg += ' <span style="color:#f87171;">🚨 Low margin — investigate.</span>';
+    const af = [];
+    const regs=Array.from(document.querySelectorAll('.region-cb:checked')).map(c=>c.value); if(regs.length) af.push(regs.join('+'));
+    const srcs=Array.from(document.querySelectorAll('.source-cb:checked')).map(c=>c.value); if(srcs.length) af.push(srcs.join('+'));
+    if(chartFilters.month) af.push(fmtMonth(chartFilters.month));
+    if(chartFilters.region) af.push(chartFilters.region);
+    if(af.length) msg += '<br><span style="color:#93c5fd;font-size:12px;">🔍 '+af.join(' · ')+'</span>';
+    el.innerHTML = msg;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 8. THRESHOLD ALERTS (client-side)
+// ═══════════════════════════════════════════════════════════════════════════════
+function loadThresholds() {
+    const deals = getFilteredDeals();
+    const bar = document.getElementById('thresholdBar');
+    bar.innerHTML = '';
+    if (!deals.length) { bar.classList.add('hidden'); return; }
+
+    let totalRevenue = 0, totalProfit = 0, totalCAC = 0;
+    for (const d of deals) {
+        totalRevenue += d.net_rev;
+        totalProfit += d.net_profit;
+        totalCAC += d.cac_value;
+    }
+    const margin = totalRevenue ? (totalProfit / totalRevenue * 100) : 0;
+    const avgCac = deals.length ? (totalCAC / deals.length) : 0;
+
+    const alerts = [];
+
+    // Margin check
+    if (margin < 35) {
+        alerts.push({level:'critical', title:'Margin Below Target', message:`Portfolio margin at ${margin.toFixed(1)}% — below 35% SLA threshold`, icon:'🚨'});
+    } else if (margin < 40) {
+        alerts.push({level:'warning', title:'Margin Watch', message:`Margin at ${margin.toFixed(1)}% — approaching 35% threshold`, icon:'⚠️'});
+    } else {
+        alerts.push({level:'ok', title:'Margin Healthy', message:`Margin at ${margin.toFixed(1)}% — above 40% target`, icon:'✅'});
+    }
+
+    // MoM trend check
+    const monthMap = {};
+    deals.forEach(d => { monthMap[d.ym] = (monthMap[d.ym] || 0) + d.net_rev; });
+    const sortedMonths = Object.keys(monthMap).sort();
+    if (sortedMonths.length >= 2) {
+        const curr = monthMap[sortedMonths[sortedMonths.length-1]];
+        const prev = monthMap[sortedMonths[sortedMonths.length-2]];
+        const chg = prev ? ((curr - prev) / prev * 100) : 0;
+        if (chg < -10) {
+            alerts.push({level:'critical', title:'Revenue Decline', message:`Revenue dropped ${Math.abs(chg).toFixed(1)}% month-over-month`, icon:'📉'});
+        } else if (chg < -5) {
+            alerts.push({level:'warning', title:'Revenue Slowing', message:`Revenue down ${Math.abs(chg).toFixed(1)}% MoM — monitor pipeline`, icon:'⚠️'});
+        } else {
+            alerts.push({level:'ok', title:'Revenue Trending', message:`Revenue ${chg > 0 ? 'up' : 'down'} ${Math.abs(chg).toFixed(1)}% MoM`, icon:'📈'});
+        }
+    }
+
+    // CAC check
+    if (avgCac > 800) {
+        alerts.push({level:'warning', title:'High CAC', message:`Avg CAC per deal: $${avgCac.toFixed(0)} — target is $500`, icon:'💰'});
+    } else {
+        alerts.push({level:'ok', title:'CAC Efficient', message:`Avg CAC per deal: $${avgCac.toFixed(0)}`, icon:'✅'});
+    }
+
+    alerts.forEach(a => bar.appendChild(createAlertEl(a.level, a.title, a.message)));
+    bar.classList.remove('hidden');
+}
+
+function createAlertEl(level, title, message) {
+    const colors = { critical:'#ef4444', danger:'#ef4444', error:'#ef4444', red:'#ef4444', warning:'#f59e0b', warn:'#f59e0b', yellow:'#f59e0b', ok:'#22c55e', success:'#22c55e', green:'#22c55e', info:'#3b82f6' };
+    const icons = { critical:'🚨', danger:'🚨', error:'❌', red:'🛑', warning:'⚠️', warn:'⚠️', yellow:'⚠️', ok:'✅', success:'✅', green:'✅', info:'💡' };
+    const lc = level ? level.toLowerCase() : 'ok';
+    const color = colors[lc] || colors.ok;
+    const icon = icons[lc] || icons.ok;
+    const el = document.createElement('div');
+    el.className = 'flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium fade-in';
+    el.style.cssText = 'background:'+color+'18;border-left:4px solid '+color+';color:var(--tx);';
+    el.innerHTML = '<span>'+icon+'</span><div><strong>'+escHtml(title)+'</strong> <span style="color:var(--tx2);">'+escHtml(message)+'</span></div>';
+    const dismiss = document.createElement('button');
+    dismiss.className = 'ml-auto alert-dismiss text-xs font-bold';
+    dismiss.style.cssText = 'color:'+color+';';
+    dismiss.textContent = '✕';
+    dismiss.onclick = () => el.remove();
+    el.appendChild(dismiss);
+    return el;
+}
+function escHtml(s) { const d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 9. CHARTS (client-side computation)
+// ═══════════════════════════════════════════════════════════════════════════════
+function destroyCharts() { Object.values(charts).forEach(c=>c.destroy()); charts={}; }
+function tc() { return isDark?'#94a3b8':'#64748b'; }
+function gc() { return isDark?'#334155':'#e2e8f0'; }
+
+function loadCharts() {
+    destroyCharts();
+    const tab = document.querySelector('.tab-content:not(.hidden)')?.id;
+    if (!tab) return;
+    if (tab==='content-executive') loadExecutive();
+    else if (tab==='content-yoy') loadYoY();
+    else if (tab==='content-efficiency') loadEfficiency();
+    else if (tab==='content-products') loadProducts();
+    else if (tab==='content-recs') loadRecs();
+    else if (tab==='content-table') loadTable();
+    else if (tab==='content-comparison') loadComparison();
+}
+
+function getMonthlyAggregation(deals) {
+    const map = {};
+    deals.forEach(d => {
+        if (!map[d.ym]) map[d.ym] = { rev: 0, profit: 0 };
+        map[d.ym].rev += d.net_rev;
+        map[d.ym].profit += d.net_profit;
+    });
+    const keys = Object.keys(map).sort();
+    return { labels: keys, revenue: keys.map(k => map[k].rev), profit: keys.map(k => map[k].profit) };
+}
+
+// ── Executive Tab ──
+function loadExecutive() {
+    const deals = getFilteredDeals();
+    const monthly = getMonthlyAggregation(deals);
+    const labels = monthly.labels.map(fmtMonth);
+
+    const datasets = [
+        { label:'Revenue', data:monthly.revenue, type:'line', borderColor:'#3b82f6', backgroundColor:'transparent', borderWidth:2.5, tension:0.3, fill:false, pointRadius:1 },
+        { label:'Profit', data:monthly.profit, type:'bar', backgroundColor:'rgba(34,197,94,.7)', borderRadius:4 }
+    ];
+
+    // Trend line (linear regression)
+    const revData = monthly.revenue;
+    if (revData.length > 1) {
+        const n = revData.length;
+        const indices = Array.from({length:n}, (_,i)=>i);
+        const sumX = indices.reduce((a,b)=>a+b, 0);
+        const sumY = revData.reduce((a,b)=>a+b, 0);
+        const sumXY = indices.reduce((a,i)=>a + i*revData[i], 0);
+        const sumX2 = indices.reduce((a,i)=>a + i*i, 0);
+        const m = (n*sumXY - sumX*sumY) / (n*sumX2 - sumX*sumX);
+        const b = (sumY - m*sumX) / n;
+        const trendData = indices.map(i => m*i + b);
+        datasets.push({
+            label:'Trend', data:trendData, type:'line',
+            borderColor:'#f59e0b', backgroundColor:'transparent',
+            borderWidth:2, borderDash:[6,3], tension:.3, fill:false, pointRadius:0, order:0
+        });
+    }
+
+    charts.trend = new Chart(document.getElementById('chartTrend'), {
+        type:'bar', data: { labels, datasets },
+        options:{
+            responsive:true, maintainAspectRatio:false,
+            onClick:(e,els)=>{if(els.length>0) toggleChartFilter('month',monthly.labels[els[0].index]);},
+            plugins:{legend:{labels:{color:tc()}}},
+            scales:{x:{grid:{display:false},ticks:{color:tc(),maxRotation:45}},y:{grid:{color:gc()},ticks:{color:tc()}}}
+        }
+    });
+
+    // Regional margin
+    const regionMap = {};
+    deals.forEach(d => {
+        if (!regionMap[d.region]) regionMap[d.region] = { rev: 0, profit: 0, count: 0 };
+        regionMap[d.region].rev += d.net_rev;
+        regionMap[d.region].profit += d.net_profit;
+        regionMap[d.region].count++;
+    });
+    const regionKeys = Object.keys(regionMap).sort((a,b) => (regionMap[b].rev || 0) - (regionMap[a].rev || 0));
+    const regionLabels = regionKeys;
+    const marginData = regionKeys.map(k => regionMap[k].rev ? (regionMap[k].profit / regionMap[k].rev * 100) : 0);
+
+    charts.region = new Chart(document.getElementById('chartRegion'), {
+        type:'bar',
+        data:{
+            labels:regionLabels,
+            datasets:[{
+                label:'Margin %',
+                data:marginData,
+                backgroundColor:marginData.map(v => v > 0 ? 'rgba(34,197,94,.8)' : 'rgba(239,68,68,.8)'),
+                borderRadius:4
+            }]
+        },
+        options:{
+            responsive:true, maintainAspectRatio:false,
+            onClick:(e,els)=>{if(els.length>0) toggleChartFilter('region',regionLabels[els[0].index]);},
+            plugins:{legend:{labels:{color:tc()}}},
+            scales:{x:{grid:{display:false},ticks:{color:tc()}},y:{grid:{color:gc()},ticks:{color:tc()}}}
+        }
+    });
+}
+
+// ── YoY Tab ──
+function loadYoY() {
+    const deals = getFilteredDeals();
+
+    // Get years present
+    const yearSet = new Set(deals.map(d => d.year));
+    const sortedYears = Array.from(yearSet).sort();
+    // Pick 2 most recent years
+    const y2 = sortedYears[sortedYears.length - 1];
+    const y1 = sortedYears.length >= 2 ? sortedYears[sortedYears.length - 2] : y2;
+
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+    function getYearData(year) {
+        const byMonth = {};
+        deals.filter(d => d.year === year).forEach(d => {
+            const m = d.month;
+            byMonth[m] = byMonth[m] || { rev: 0, profit: 0 };
+            byMonth[m].rev += d.net_rev;
+            byMonth[m].profit += d.net_profit;
+        });
+        return {
+            rev: months.map((_, i) => { const m = byMonth[i+1]; return m ? m.rev : 0; }),
+            profit: months.map((_, i) => { const m = byMonth[i+1]; return m ? m.profit : 0; })
+        };
+    }
+
+    const data1 = getYearData(y1);
+    const data2 = getYearData(y2);
+
+    document.getElementById('yoyTitle').textContent = 'Year-over-Year: Revenue & Profit Comparison ('+y1+' vs '+y2+')';
+
+    charts.yoy = new Chart(document.getElementById('chartYoY'), {
+        type:'bar',
+        data:{
+            labels:months,
+            datasets:[
+                {label:y1+' Revenue', data:data1.rev, backgroundColor:'rgba(148,163,184,.5)', borderColor:'#94a3b8', borderWidth:1, borderRadius:3},
+                {label:y2+' Revenue', data:data2.rev, backgroundColor:'rgba(59,130,246,.8)', borderColor:'#3b82f6', borderWidth:2, borderRadius:3},
+                {label:y1+' Profit', data:data1.profit, type:'line', borderColor:'#22c55e', borderDash:[5,5], borderWidth:2, tension:.3, fill:false, pointRadius:2},
+                {label:y2+' Profit', data:data2.profit, type:'line', borderColor:'#22c55e', borderWidth:2.5, tension:.3, fill:false, pointRadius:3}
+            ]
+        },
+        options:{
+            responsive:true, maintainAspectRatio:false,
+            plugins:{legend:{labels:{color:tc()}}},
+            scales:{x:{grid:{display:false},ticks:{color:tc()}},y:{grid:{color:gc()},ticks:{color:tc()}}}
+        }
+    });
+
+    const rev1 = data1.rev.reduce((a,b)=>a+b,0);
+    const rev2 = data2.rev.reduce((a,b)=>a+b,0);
+    const prof1 = data1.profit.reduce((a,b)=>a+b,0);
+    const prof2 = data2.profit.reduce((a,b)=>a+b,0);
+    const revChg = rev1 ? ((rev2-rev1)/rev1*100).toFixed(1) : 'N/A';
+    const profChg = prof1 ? ((prof2-prof1)/prof1*100).toFixed(1) : 'N/A';
+
+    document.getElementById('yoySummary').innerHTML =
+        '<div class="grid grid-cols-2 lg:grid-cols-4 gap-4 text-center">'+
+        '<div><p class="text-[10px] uppercase font-bold" style="color:var(--tx3);">'+y1+' Total Rev</p><p class="text-lg font-black" style="color:var(--tx);">$'+(rev1/1e6).toFixed(1)+'M</p></div>'+
+        '<div><p class="text-[10px] uppercase font-bold" style="color:var(--tx3);">'+y2+' Total Rev</p><p class="text-lg font-black" style="color:var(--ac);">$'+(rev2/1e6).toFixed(1)+'M</p></div>'+
+        '<div><p class="text-[10px] uppercase font-bold" style="color:var(--tx3);">Revenue Change</p><p class="text-lg font-black" style="color:'+(parseFloat(revChg)>0?'var(--ok)':'#ef4444')+';"">'+revChg+'%</p></div>'+
+        '<div><p class="text-[10px] uppercase font-bold" style="color:var(--tx3);">Profit Change</p><p class="text-lg font-black" style="color:'+(parseFloat(profChg)>0?'var(--ok)':'#ef4444')+';"">'+profChg+'%</p></div></div>';
+}
+
+// ── Efficiency Tab ──
+function loadEfficiency() {
+    const deals = getFilteredDeals();
+
+    // Channel ROI (Scatter/Bubble)
+    const channelMap = {};
+    deals.forEach(d => {
+        if (!channelMap[d.source_name]) channelMap[d.source_name] = { rev: 0, cac: 0, count: 0, profit: 0 };
+        channelMap[d.source_name].rev += d.net_rev;
+        channelMap[d.source_name].cac += d.cac_value;
+        channelMap[d.source_name].count++;
+        channelMap[d.source_name].profit += d.net_profit;
+    });
+    const channelKeys = Object.keys(channelMap).sort((a,b) => channelMap[b].rev - channelMap[a].rev);
+    const points = channelKeys.map(k => ({
+        label: k,
+        x: channelMap[k].cac / (channelMap[k].count || 1), // avg CAC
+        y: channelMap[k].rev,
+        r: Math.min(20, Math.max(5, Math.floor(channelMap[k].count / 80)))
+    }));
+
+    charts.scatter = new Chart(document.getElementById('chartScatter'), {
+        type:'bubble',
+        data:{
+            datasets:[{
+                label:'Channels',
+                data:points.map(p => ({ x: p.x, y: p.y, r: Math.min(20, Math.max(5, p.r || 8)) })),
+                backgroundColor:'rgba(59,130,246,.6)',
+                borderColor:'#3b82f6',
+                borderWidth:1
+            }]
+        },
+        options:{
+            responsive:true, maintainAspectRatio:false,
+            plugins:{
+                legend:{display:false},
+                tooltip:{
+                    callbacks:{
+                        label: ctx => {
+                            const pt = points[ctx.dataIndex];
+                            return (pt?.label||'') + ': CAC $' + ctx.raw.x.toFixed(0) + ', Rev $' + ctx.raw.y.toLocaleString();
+                        }
+                    }
+                }
+            },
+            scales:{
+                x:{title:{display:true, text:'Avg CAC ($)', color:tc()}, grid:{color:gc()}, ticks:{color:tc()}},
+                y:{title:{display:true, text:'Total Revenue ($)', color:tc()}, grid:{color:gc()}, ticks:{color:tc()}}
+            }
+        }
+    });
+
+    // Funnel (Doughnut)
+    const funnelKeys = channelKeys; // already sorted by rev desc
+    const funnelValues = funnelKeys.map(k => channelMap[k].count);
+
+    charts.funnel = new Chart(document.getElementById('chartFunnel'), {
+        type:'doughnut',
+        data:{
+            labels:funnelKeys,
+            datasets:[{
+                data:funnelValues,
+                backgroundColor:['#3b82f6','#22c55e','#f59e0b','#ef4444','#8b5cf6'],
+                borderWidth:0
+            }]
+        },
+        options:{
+            responsive:true, maintainAspectRatio:false,
+            onClick:(e,els)=>{if(els.length>0) toggleChartFilter('source',funnelKeys[els[0].index]);},
+            plugins:{legend:{position:'bottom',labels:{color:tc()}}}
+        }
+    });
+}
+
+// ── Products Tab ──
+function loadProducts() {
+    const deals = getFilteredDeals();
+
+    // Top 5 products by profit
+    const prodMap = {};
+    deals.forEach(d => {
+        if (!prodMap[d.product_name]) prodMap[d.product_name] = { rev: 0, profit: 0 };
+        prodMap[d.product_name].rev += d.net_rev;
+        prodMap[d.product_name].profit += d.net_profit;
+    });
+    const prodKeys = Object.keys(prodMap).sort((a,b) => prodMap[b].profit - prodMap[a].profit).slice(0, 5);
+    const shortLabels = prodKeys.map(l => l.length > 30 ? l.substring(0, 27) + '...' : l);
+
+    charts.products = new Chart(document.getElementById('chartProducts'), {
+        type:'bar',
+        data:{
+            labels:shortLabels,
+            datasets:[
+                {label:'Revenue', data:prodKeys.map(k => prodMap[k].rev), backgroundColor:'rgba(99,102,241,.7)', borderRadius:4},
+                {label:'Profit', data:prodKeys.map(k => prodMap[k].profit), backgroundColor:'rgba(34,197,94,.8)', borderRadius:4}
+            ]
+        },
+        options:{
+            indexAxis:'y', responsive:true, maintainAspectRatio:false,
+            plugins:{legend:{labels:{color:tc()}}},
+            scales:{x:{grid:{color:gc()},ticks:{color:tc()}},y:{grid:{display:false},ticks:{color:tc()}}}
+        }
+    });
+
+    // Account tier revenue share
+    const tierMap = {};
+    deals.forEach(d => {
+        const t = d.tier;
+        if (!tierMap[t]) tierMap[t] = { rev: 0, deals: 0 };
+        tierMap[t].rev += d.net_rev;
+        tierMap[t].deals++;
+    });
+    const tierKeys = Object.keys(tierMap).sort((a,b) => tierMap[b].rev - tierMap[a].rev);
+
+    charts.tiers = new Chart(document.getElementById('chartTiers'), {
+        type:'doughnut',
+        data:{
+            labels:tierKeys,
+            datasets:[{
+                data:tierKeys.map(k => tierMap[k].rev),
+                backgroundColor:['#1e1b4b','#4338ca','#818cf8','#c7d2fe'],
+                borderWidth:0
+            }]
+        },
+        options:{
+            responsive:true, maintainAspectRatio:false,
+            plugins:{legend:{position:'bottom',labels:{color:tc()}}}
+        }
+    });
+}
+
+// ── Recommendations Tab ──
+function loadRecs() {
+    const deals = getFilteredDeals();
+    const el = document.getElementById('recsList');
+
+    if (!deals.length) { el.innerHTML = '<p style="color:var(--tx3);">No recommendations available.</p>'; return; }
+
+    // Compute metrics
+    let totalRevenue = 0, totalProfit = 0, totalCAC = 0;
+    for (const d of deals) {
+        totalRevenue += d.net_rev;
+        totalProfit += d.net_profit;
+        totalCAC += d.cac_value;
+    }
+    const margin = totalRevenue ? (totalProfit / totalRevenue * 100) : 0;
+    const cacPerDeal = deals.length ? (totalCAC / deals.length).toFixed(0) : 0;
+
+    let html = '';
+    if (margin > 40) html += recCard('✅ Margin Health', 'success', 'Strong '+margin.toFixed(1)+'% margin across '+deals.length.toLocaleString()+' deals. Portfolio is well-optimized — maintain current pricing and discount strategy.');
+    else if (margin > 30) html += recCard('⚠️ Margin Warning', 'warning', 'Margin at '+margin.toFixed(1)+'% is below the 40% target. Review discount levels and renegotiate vendor costs to improve bottom line.');
+    else html += recCard('🚨 Margin Critical', 'danger', 'Margin critically low at '+margin.toFixed(1)+'%. Immediate action: reduce discounts, cut underperforming channels, and renegotiate top vendor contracts.');
+
+    html += recCard('💰 CAC Optimization', 'info', 'Average CAC per deal: $'+cacPerDeal+'. Focus budget on inbound/partner channels (lowest CAC) and reduce spend on high-cost outbound events. Target: <$500/deal.');
+    html += recCard('📈 Growth Strategy', 'info', 'Portfolio generating $'+(totalRevenue/1e6).toFixed(1)+'M. To scale: (1) Double down on top 3 products by profit, (2) Expand into underrepresented regions, (3) Bundle complementary products for cross-sell.');
+    html += recCard('🎯 Next Steps', 'action', '1. Run YoY comparison tab to identify growth/decline patterns\n2. Use region filter to find underperforming geographies\n3. Compare channel ROI to reallocate marketing budget\n4. Set up quarterly reviews using Export CSV for deep-dive analysis');
+
+    el.innerHTML = html;
+}
+
+function recCard(title, type, text) {
+    const colors = { success:'var(--ok)', warning:'var(--wn)', danger:'#ef4444', info:'var(--ac)', action:'var(--in)' };
+    const icons = { success:'✅', warning:'⚠️', danger:'🚨', info:'💡', action:'🎯' };
+    return '<div class="p-5 rounded-xl" style="background:var(--bg2);border:1px solid var(--bd);border-left:4px solid '+colors[type]+';">'+
+        '<h3 class="text-sm font-bold mb-2" style="color:var(--tx);">'+icons[type]+' '+title+'</h3>'+
+        '<p class="text-sm leading-relaxed" style="color:var(--tx2);white-space:pre-line;">'+text+'</p></div>';
+}
+
+// ── CSV Export ──
+function exportCSV() {
+    const deals = getFilteredDeals();
+    if (!deals.length) { alert('No deals to export.'); return; }
+
+    const headers = ['ID','Code','Product','Category','Company','Region','Industry','Tier','Source','Qty','Discount','Gross Rev','Disc Amt','Net Rev','Total Cost','CAC','Opex','Net Profit','Date'];
+    let csv = headers.join(',') + '\n';
+
+    deals.forEach((d, i) => {
+        const row = [
+            i+1, d.product_code, d.product_name, d.product_category,
+            d.company_name, d.region, d.industry, d.tier,
+            d.source_name, d.qty, d.discount,
+            d.gross_rev, d.discount_amt, d.net_rev,
+            d.total_cost, d.cac_value, d.opex_overhead,
+            d.net_profit, d.date
+        ];
+        csv += row.map(v => {
+            const s = String(v);
+            return s.includes(',') || s.includes('"') ? '"'+s.replace(/"/g,'""')+'"' : s;
+        }).join(',') + '\n';
+    });
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'revops_'+new Date().toISOString().split('T')[0]+'.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+// ── Data Table ──
+function loadTable() {
+    const tbody = document.getElementById('tableBody');
+    const pagination = document.getElementById('tablePagination');
+    const totalEl = document.getElementById('tableTotal');
+    if (!tbody) return;
+
+    const search = document.getElementById('tableSearch')?.value?.trim().toLowerCase() || '';
+    tableState.search = search;
+
+    let data = getFilteredDeals();
+
+    // Client-side search
+    if (search) {
+        data = data.filter(d =>
+            d.company_name.toLowerCase().includes(search) ||
+            d.product_name.toLowerCase().includes(search) ||
+            d.region.toLowerCase().includes(search) ||
+            d.source_name.toLowerCase().includes(search)
+        );
+    }
+
+    tableState.total = data.length;
+    totalEl.textContent = data.length.toLocaleString() + ' total';
+
+    // Sort
+    if (tableState.sortCol) {
+        const col = tableState.sortCol;
+        data.sort((a,b) => {
+            let va, vb;
+            if (col === 'revenue') { va = a.net_rev; vb = b.net_rev; }
+            else if (col === 'cac') { va = a.cac_value; vb = b.cac_value; }
+            else if (col === 'profit') { va = a.net_profit; vb = b.net_profit; }
+            else if (col === 'qty') { va = a.qty; vb = b.qty; }
+            else if (col === 'date') { va = a.date; vb = b.date; }
+            else if (col === 'company') { va = a.company_name.toLowerCase(); vb = b.company_name.toLowerCase(); }
+            else if (col === 'region') { va = a.region; vb = b.region; }
+            else if (col === 'product') { va = a.product_name.toLowerCase(); vb = b.product_name.toLowerCase(); }
+            else if (col === 'source') { va = a.source_name.toLowerCase(); vb = b.source_name.toLowerCase(); }
+            if (va < vb) return tableState.sortDir === 'asc' ? -1 : 1;
+            if (va > vb) return tableState.sortDir === 'asc' ? 1 : -1;
+            return 0;
+        });
+    }
+
+    tableState.data = data;
+
+    // Paginate
+    const totalPages = Math.max(1, Math.ceil(data.length / tableState.pageSize));
+    if (tableState.page > totalPages) tableState.page = totalPages;
+    const startIdx = (tableState.page - 1) * tableState.pageSize;
+    const pageData = data.slice(startIdx, startIdx + tableState.pageSize);
+
+    // Render
+    if (!pageData.length) {
+        tbody.innerHTML = '<tr><td colspan="9" class="text-center py-8" style="color:var(--tx3);">No deals found.</td></tr>';
+    } else {
+        let html = '';
+        pageData.forEach(d => {
+            const profit = d.net_profit;
+            html += '<tr style="border-bottom:1px solid var(--bd);">'+
+                '<td class="px-3 py-2" style="color:var(--tx2);">'+escHtml(d.date)+'</td>'+
+                '<td class="px-3 py-2 font-medium" style="color:var(--tx);">'+escHtml(d.company_name)+'</td>'+
+                '<td class="px-3 py-2" style="color:var(--tx2);">'+escHtml(d.region)+'</td>'+
+                '<td class="px-3 py-2" style="color:var(--tx2);">'+escHtml(d.product_name)+'</td>'+
+                '<td class="px-3 py-2 text-right" style="color:var(--tx2);">'+fmtNum(d.qty)+'</td>'+
+                '<td class="px-3 py-2 text-right font-medium" style="color:var(--tx);">$'+fmtNum(d.net_rev)+'</td>'+
+                '<td class="px-3 py-2 text-right" style="color:var(--tx2);">$'+fmtNum(d.cac_value)+'</td>'+
+                '<td class="px-3 py-2 text-right font-medium" style="color:'+(profit>=0?'var(--ok)':'#ef4444')+';">$'+fmtNum(profit)+'</td>'+
+                '<td class="px-3 py-2" style="color:var(--tx2);">'+escHtml(d.source_name)+'</td>'+
+                '</tr>';
+        });
+        tbody.innerHTML = html;
+    }
+
+    renderPagination();
+}
+
+function fmtNum(n) {
+    const v = parseFloat(n) || 0;
+    if (Math.abs(v) >= 1e6) return (v/1e6).toFixed(1)+'M';
+    if (Math.abs(v) >= 1e3) return (v/1e3).toFixed(1)+'K';
+    return v.toFixed(0);
+}
+
+function renderPagination() {
+    const el = document.getElementById('tablePagination');
+    const total = tableState.total;
+    const pageSize = tableState.pageSize;
+    const current = tableState.page;
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    let html = '';
+
+    html += '<button class="pagination-btn" onclick="goToPage('+(current-1)+')"'+(current<=1?' disabled':'')+'>‹ Prev</button>';
+
+    const maxVisible = 7;
+    let start = Math.max(1, current - Math.floor(maxVisible/2));
+    let end = Math.min(totalPages, start + maxVisible - 1);
+    if (end - start < maxVisible - 1) start = Math.max(1, end - maxVisible + 1);
+
+    if (start > 1) {
+        html += '<button class="pagination-btn" onclick="goToPage(1)">1</button>';
+        if (start > 2) html += '<span class="text-xs" style="color:var(--tx3);">…</span>';
+    }
+    for (let i = start; i <= end; i++) {
+        html += '<button class="pagination-btn'+(i===current?' active':'')+'" onclick="goToPage('+i+')">'+i+'</button>';
+    }
+    if (end < totalPages) {
+        if (end < totalPages - 1) html += '<span class="text-xs" style="color:var(--tx3);">…</span>';
+        html += '<button class="pagination-btn" onclick="goToPage('+totalPages+')\">'+totalPages+'</button>';
+    }
+
+    html += '<button class="pagination-btn" onclick="goToPage('+(current+1)+')"'+(current>=totalPages?' disabled':'')+'>Next ›</button>';
+    el.innerHTML = html;
+}
+
+function goToPage(n) {
+    if (n < 1 || n > Math.ceil(tableState.total / tableState.pageSize)) return;
+    tableState.page = n;
+    loadTable();
+}
+
+function sortTable(col) {
+    if (tableState.sortCol === col) {
+        tableState.sortDir = tableState.sortDir === 'asc' ? 'desc' : 'asc';
+    } else {
+        tableState.sortCol = col;
+        tableState.sortDir = 'asc';
+    }
+    document.querySelectorAll('.sortable .sort-arrow').forEach(a => a.textContent = '↕');
+    const th = document.querySelector(`.sortable[onclick*="'${col}'"]`);
+    if (th) {
+        th.querySelector('.sort-arrow').textContent = tableState.sortDir === 'asc' ? '↑' : '↓';
+    }
+    renderTable();
+}
+
+// Inline renderTable for sorting
+function renderTable() {
+    const tbody = document.getElementById('tableBody');
+    let data = [...tableState.data];
+
+    if (tableState.sortCol) {
+        const col = tableState.sortCol;
+        data.sort((a,b) => {
+            let va, vb;
+            if (col === 'revenue') { va = a.net_rev; vb = b.net_rev; }
+            else if (col === 'cac') { va = a.cac_value; vb = b.cac_value; }
+            else if (col === 'profit') { va = a.net_profit; vb = b.net_profit; }
+            else if (col === 'qty') { va = a.qty; vb = b.qty; }
+            else if (col === 'date') { va = a.date; vb = b.date; }
+            else if (col === 'company') { va = a.company_name.toLowerCase(); vb = b.company_name.toLowerCase(); }
+            else if (col === 'region') { va = a.region; vb = b.region; }
+            else if (col === 'product') { va = a.product_name.toLowerCase(); vb = b.product_name.toLowerCase(); }
+            else if (col === 'source') { va = a.source_name.toLowerCase(); vb = b.source_name.toLowerCase(); }
+            if (va < vb) return tableState.sortDir === 'asc' ? -1 : 1;
+            if (va > vb) return tableState.sortDir === 'asc' ? 1 : -1;
+            return 0;
+        });
+    }
+
+    if (!data.length) {
+        tbody.innerHTML = '<tr><td colspan="9" class="text-center py-8" style="color:var(--tx3);">No deals found.</td></tr>';
+        return;
+    }
+
+    let html = '';
+    data.forEach(d => {
+        const profit = d.net_profit;
+        html += '<tr style="border-bottom:1px solid var(--bd);">'+
+            '<td class="px-3 py-2" style="color:var(--tx2);">'+escHtml(d.date)+'</td>'+
+            '<td class="px-3 py-2 font-medium" style="color:var(--tx);">'+escHtml(d.company_name)+'</td>'+
+            '<td class="px-3 py-2" style="color:var(--tx2);">'+escHtml(d.region)+'</td>'+
+            '<td class="px-3 py-2" style="color:var(--tx2);">'+escHtml(d.product_name)+'</td>'+
+            '<td class="px-3 py-2 text-right" style="color:var(--tx2);">'+fmtNum(d.qty)+'</td>'+
+            '<td class="px-3 py-2 text-right font-medium" style="color:var(--tx);">$'+fmtNum(d.net_rev)+'</td>'+
+            '<td class="px-3 py-2 text-right" style="color:var(--tx2);">$'+fmtNum(d.cac_value)+'</td>'+
+            '<td class="px-3 py-2 text-right font-medium" style="color:'+(profit>=0?'var(--ok)':'#ef4444')+';">$'+fmtNum(profit)+'</td>'+
+            '<td class="px-3 py-2" style="color:var(--tx2);">'+escHtml(d.source_name)+'</td>'+
+            '</tr>';
+    });
+    tbody.innerHTML = html;
+}
+
+// ── Comparison Tab ──
+function loadComparison() {
+    const deals = getFilteredDeals();
+
+    const compareEl1 = document.getElementById('compRegion1');
+    const compareEl2 = document.getElementById('compRegion2');
+
+    // Compute per-region metrics
+    const regionMap = {};
+    deals.forEach(d => {
+        if (!regionMap[d.region]) regionMap[d.region] = { rev: 0, profit: 0, cac: 0, deals: 0, marginSum: 0, marginCount: 0 };
+        regionMap[d.region].rev += d.net_rev;
+        regionMap[d.region].profit += d.net_profit;
+        regionMap[d.region].cac += d.cac_value;
+        regionMap[d.region].deals++;
+        if (d.net_rev) {
+            regionMap[d.region].marginSum += d.net_profit / d.net_rev * 100;
+            regionMap[d.region].marginCount++;
+        }
+    });
+
+    const regions = Object.keys(regionMap).sort((a,b) => regionMap[b].rev - regionMap[a].rev);
+    const metrics = ['Revenue', 'Profit', 'Margin %', 'Deals', 'Total CAC'];
+    const metricKeys = ['rev', 'profit', 'margin', 'deals', 'cac'];
+    const metricColors = ['#3b82f6','#22c55e','#f59e0b','#8b5cf6','#ef4444'];
+
+    // Get metric value for a region
+    function getMetric(region, metricIdx) {
+        const r = regionMap[region];
+        if (!r) return 0;
+        const key = metricKeys[metricIdx];
+        if (key === 'margin') return r.marginCount ? (r.marginSum / r.marginCount) : 0;
+        return r[key];
+    }
+
+    // Populate dropdowns
+    const current1 = compareEl1.value;
+    const current2 = compareEl2.value;
+    const allOpt = '<option value="__all">All Regions</option>';
+    const regionOpts = regions.map(r => '<option value="'+escHtml(r)+'">'+escHtml(r)+'</option>').join('');
+    compareEl1.innerHTML = allOpt + regionOpts;
+    compareEl2.innerHTML = allOpt + regionOpts;
+    if (current1 && regions.includes(current1)) compareEl1.value = current1;
+    else if (regions.length > 0) compareEl1.value = regions[0];
+    if (current2 && regions.includes(current2) && current2 !== compareEl1.value) compareEl2.value = current2;
+    else if (regions.length > 1) compareEl2.value = regions[1];
+    else compareEl2.value = '__all';
+
+    const sel1 = compareEl1.value;
+    const sel2 = compareEl2.value;
+
+    // Build chart datasets
+    let datasets = [];
+    let chartLabels = metrics;
+
+    function getAvgData(region) {
+        return metrics.map((_, mi) => getMetric(region, mi));
+    }
+
+    if (sel1 === '__all' && sel2 === '__all') {
+        datasets = regions.map((region, ri) => ({
+            label: region,
+            data: metrics.map((_, mi) => getMetric(region, mi)),
+            backgroundColor: metricColors[ri % 5],
+            borderRadius: 4
+        }));
+    } else {
+        if (sel1 !== '__all') {
+            datasets.push({
+                label: sel1,
+                data: getAvgData(sel1),
+                backgroundColor: 'rgba(59,130,246,.8)',
+                borderRadius: 4
+            });
+        }
+        if (sel2 !== '__all' && sel2 !== sel1) {
+            datasets.push({
+                label: sel2,
+                data: getAvgData(sel2),
+                backgroundColor: 'rgba(34,197,94,.8)',
+                borderRadius: 4
+            });
+        }
+    }
+
+    charts.comparison = new Chart(document.getElementById('chartComparison'), {
+        type:'bar',
+        data:{ labels:chartLabels, datasets },
+        options:{
+            responsive:true, maintainAspectRatio:false,
+            plugins:{ legend:{ labels:{ color:tc() } } },
+            scales:{
+                x:{ grid:{ display:false }, ticks:{ color:tc() } },
+                y:{ grid:{ color:gc() }, ticks:{ color:tc() } }
+            }
+        }
+    });
+
+    // Build comparison table
+    const tbody = document.getElementById('compTableBody');
+    document.getElementById('compHeader1').textContent = sel1 === '__all' ? 'All Regions' : sel1;
+    document.getElementById('compHeader2').textContent = sel2 === '__all' ? 'All Regions' : (sel2 === sel1 ? '' : sel2);
+    let tableHtml = '';
+
+    const getVal = (region, mi) => {
+        if (region === '__all') {
+            const vals = regions.map(r => getMetric(r, mi));
+            const valid = vals.filter(v => v !== null && v !== undefined);
+            return valid.length ? valid.reduce((a,b)=>a+b,0) / valid.length : 0;
+        }
+        return getMetric(region, mi);
+    };
+
+    metrics.forEach((metric, mi) => {
+        const v1 = getVal(sel1, mi);
+        const v2 = getVal(sel2 === '__all' || sel2 === sel1 ? sel1 : sel2, mi);
+        const diff = v2 - v1;
+        const diffPct = v1 ? ((diff/v1)*100).toFixed(1) : '—';
+        const isPct = metric.toLowerCase().includes('margin') || metric.toLowerCase().includes('%');
+        const fmt = (v) => {
+            const abs = Math.abs(v);
+            if (isPct) return v.toFixed(1) + '%';
+            if (abs >= 1e6) return '$'+(v/1e6).toFixed(2)+'M';
+            if (abs >= 1e3) return '$'+(v/1e3).toFixed(1)+'K';
+            return '$'+v.toFixed(0);
+        };
+        tableHtml += '<tr><td style="font-weight:600;color:var(--tx);">'+escHtml(metric)+'</td>'+
+            '<td>'+fmt(v1)+'</td>'+
+            '<td>'+fmt(v2)+'</td>'+
+            '<td style="color:'+(diff>=0?'var(--ok)':'#ef4444')+';">'+(isPct ? (diff>=0?'+':'')+diff.toFixed(1)+'%' : (diff>=0?'+':'')+fmt(diff))+'</td></tr>';
+    });
+    tbody.innerHTML = tableHtml;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 10. INIT
+// ═══════════════════════════════════════════════════════════════════════════════
+// Generate deals synchronously in a single batch
+ALL_DEALS = generateAllDeals();
+initTheme();
+document.getElementById('loadingOverlay').classList.add('hidden');
+loadKPIs();
+loadThresholds();
+loadCharts();
+</script>
+</body>
+</html>

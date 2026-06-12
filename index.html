@@ -1,0 +1,1301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enterprise RevOps Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>tailwind.config = { darkMode: 'class' }</script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    
+    <style>
+        :root { --bg:#f8fafc;--bg2:#ffffff;--bg3:#f1f5f9;--tx:#0f172a;--tx2:#334155;--tx3:#64748b;--bd:#e2e8f0;--ac:#3b82f6;--ok:#22c55e;--wn:#f59e0b;--in:#8b5cf6;--er:#ef4444; }
+        .dark { --bg:#0f172a;--bg2:#1e293b;--bg3:#334155;--tx:#f1f5f9;--tx2:#cbd5e1;--tx3:#94a3b8;--bd:#334155;--ac:#60a5fa; }
+        body { font-family:'Inter',system-ui,sans-serif; background:var(--bg); color:var(--tx); }
+        * { scrollbar-width:thin; scrollbar-color:var(--bd) transparent; }
+        .fade-in { animation: fadeIn .3s ease-out; }
+        @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes pulse-glow { 0%,100%{box-shadow:0 0 0 0 rgba(34,197,94,.3)} 50%{box-shadow:0 0 0 8px rgba(34,197,94,0)} }
+        .pulse-glow { animation:pulse-glow 2s infinite; }
+        .sidebar-open .sidebar-overlay { display:block; }
+        .sidebar-open .sidebar { transform:translateX(0)!important; pointer-events:auto!important; }
+        @media (max-width:1023px) { #sidebar { pointer-events:none; z-index:5!important; } header { z-index:60!important; } .sidebar-open header { z-index:35!important; } }
+        .dropdown-menu { display:none; position:absolute; left:0; right:0; z-index:40; }
+        .dropdown-menu.open { display:block; }
+        .dd-btn.active { border-color:var(--ac)!important; background:rgba(59,130,246,.08)!important; }
+        .sortable { cursor:pointer; user-select:none; }
+        .sortable:hover { color:var(--ac); }
+        .sortable .sort-arrow { opacity:0.4; display:inline-block; margin-left:4px; }
+        .sortable.asc .sort-arrow, .sortable.desc .sort-arrow { opacity:1; color:var(--ac); }
+        .pagination-btn { padding:4px 10px; border-radius:6px; font-size:12px; font-weight:600; cursor:pointer; transition:all .15s; border:1px solid var(--bd); color:var(--tx2); background:var(--bg2); }
+        .pagination-btn:hover { background:var(--bg3); }
+        .pagination-btn.active { background:var(--ac); color:white; border-color:var(--ac); }
+        .pagination-btn:disabled { opacity:.4; cursor:default; }
+        .comp-table td, .comp-table th { padding:8px 10px; text-align:left; font-size:12px; }
+        .comp-table th { font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--tx3); background:var(--bg3); }
+        .comp-table td { color:var(--tx2); border-bottom:1px solid var(--bd); }
+        .search-input { background:var(--bg3); border:1px solid var(--bd); color:var(--tx); padding:8px 12px; border-radius:8px; font-size:12px; width:100%; outline:none; }
+        .search-input:focus { border-color:var(--ac); }
+        canvas { cursor: pointer; } 
+        
+        /* Local Tab Buttons inside charts */
+        .local-tab-btn { padding: 4px 10px; font-size: 11px; font-weight: 600; border-radius: 6px; cursor: pointer; transition: all 0.2s; color: var(--tx3); border: 1px solid transparent; }
+        .local-tab-btn.active { background: var(--bg2); color: var(--tx); box-shadow: 0 1px 2px rgba(0,0,0,0.05); border-color: var(--bd); }
+        .local-tab-btn:hover:not(.active) { color: var(--tx); }
+    </style>
+</head>
+<body class="min-h-screen">
+
+<div id="loadingOverlay" class="fixed inset-0 z-50 flex flex-col items-center justify-center transition-opacity duration-500" style="background:var(--bg);">
+    <div class="relative flex items-center justify-center mb-6">
+        <div class="w-16 h-16 border-4 border-t-transparent rounded-full absolute" style="border-color:var(--ac);border-top-color:transparent;animation:spin 1s linear infinite;"></div>
+        <div class="w-10 h-10 border-4 border-b-transparent rounded-full absolute" style="border-color:var(--in);border-bottom-color:transparent;animation:spin 1.5s linear infinite reverse;"></div>
+    </div>
+    <p class="text-sm font-bold" style="color:var(--tx);">Initializing Data Engine</p>
+    <p class="mt-1 text-xs font-medium" style="color:var(--tx3);" id="loadingText">Generating 11,000 asynchronous deals...</p>
+    <div class="mt-4 w-64 h-2 rounded-full" style="background:var(--bg3);overflow:hidden;">
+        <div id="genProgress" class="h-full rounded-full" style="background:linear-gradient(90deg, var(--ac), var(--in));width:0%;transition:width .1s;"></div>
+    </div>
+</div>
+
+<div id="sidebarOverlay" class="fixed inset-0 bg-black/50 z-40 lg:hidden hidden" onclick="toggleSidebar()"></div>
+
+<div class="flex min-h-screen">
+<aside id="sidebar" class="fixed lg:sticky top-0 left-0 w-72 h-screen z-50 lg:z-10 flex flex-col shrink-0 transition-transform duration-300 -translate-x-full lg:translate-x-0" style="background:var(--bg2);border-right:1px solid var(--bd);">
+    <div class="p-5 flex items-center gap-3" style="border-bottom:1px solid var(--bd);">
+        <div class="p-2 rounded-xl text-white" style="background:linear-gradient(135deg,#3b82f6,#6366f1);">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
+        </div>
+        <div><h1 class="font-extrabold text-sm" style="color:var(--tx);">RevOps Engine</h1><p class="text-[9px] font-semibold uppercase tracking-widest" style="color:var(--tx3);">Enterprise Edition</p></div>
+    </div>
+    
+    <nav class="p-4 space-y-1.5 overflow-y-auto flex-1" role="tablist">
+        <p class="text-[10px] font-bold uppercase tracking-wider mb-2 ml-2" style="color:var(--tx3);">Core Metrics</p>
+        <button onclick="switchTab('executive')" id="tab-executive" role="tab" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all" style="background:var(--ac);color:white;">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>Executive Summary</button>
+        <button onclick="switchTab('sales')" id="tab-sales" role="tab" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all" style="color:var(--tx3);">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>Sales Performance</button>
+        <button onclick="switchTab('efficiency')" id="tab-efficiency" role="tab" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all" style="color:var(--tx3);">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"/></svg>CAC & Efficiency</button>
+        
+        <p class="text-[10px] font-bold uppercase tracking-wider mb-2 mt-4 ml-2" style="color:var(--tx3);">Data & Analysis</p>
+        <button onclick="switchTab('table')" id="tab-table" role="tab" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all" style="color:var(--tx3);">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>Deal Records (Data)</button>
+        <button onclick="switchTab('yoy')" id="tab-yoy" role="tab" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all" style="color:var(--tx3);">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>YoY Trend Analysis</button>
+        <button onclick="switchTab('comparison')" id="tab-comparison" role="tab" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all" style="color:var(--tx3);">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>Region Comparison</button>
+    </nav>
+
+    <div class="p-4 space-y-4" style="border-top:1px solid var(--bd);">
+        <p class="text-[10px] font-bold uppercase tracking-wider" style="color:var(--tx3);">Global Filters</p>
+        
+        <div class="relative">
+            <button onclick="toggleDD('dd-year')" id="dd-year-btn" class="dd-btn w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium text-left" style="background:var(--bg3);border:1px solid var(--bd);color:var(--tx);">
+                <span id="dd-year-label">All Years</span>
+                <svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </button>
+            <div id="dd-year" class="dropdown-menu mt-1 p-2 space-y-1 rounded-lg shadow-xl" style="background:var(--bg2);border:1px solid var(--bd);bottom:100%; margin-bottom:4px;">
+                <label class="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer text-xs hover:bg-blue-50 dark:hover:bg-blue-900/20"><input type="checkbox" value="2024" onchange="syncSidebarFilter('years', this.value, this.checked)" class="cb-years rounded" style="accent-color:var(--ac);"><span style="color:var(--tx2);">2024</span></label>
+                <label class="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer text-xs hover:bg-blue-50 dark:hover:bg-blue-900/20"><input type="checkbox" value="2025" onchange="syncSidebarFilter('years', this.value, this.checked)" class="cb-years rounded" style="accent-color:var(--ac);"><span style="color:var(--tx2);">2025</span></label>
+                <label class="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer text-xs hover:bg-blue-50 dark:hover:bg-blue-900/20"><input type="checkbox" value="2026" onchange="syncSidebarFilter('years', this.value, this.checked)" class="cb-years rounded" style="accent-color:var(--ac);"><span style="color:var(--tx2);">2026</span></label>
+            </div>
+        </div>
+
+        <div class="relative">
+            <button onclick="toggleDD('dd-quarter')" id="dd-quarter-btn" class="dd-btn w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium text-left" style="background:var(--bg3);border:1px solid var(--bd);color:var(--tx);">
+                <span id="dd-quarter-label">All Quarters</span>
+                <svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </button>
+            <div id="dd-quarter" class="dropdown-menu mt-1 p-2 space-y-1 rounded-lg shadow-xl" style="background:var(--bg2);border:1px solid var(--bd);bottom:100%; margin-bottom:4px;">
+                <label class="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer text-xs hover:bg-blue-50 dark:hover:bg-blue-900/20"><input type="checkbox" value="1" onchange="syncSidebarFilter('quarterNums', this.value, this.checked)" class="cb-quarters rounded" style="accent-color:var(--ac);"><span style="color:var(--tx2);">Q1</span></label>
+                <label class="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer text-xs hover:bg-blue-50 dark:hover:bg-blue-900/20"><input type="checkbox" value="2" onchange="syncSidebarFilter('quarterNums', this.value, this.checked)" class="cb-quarters rounded" style="accent-color:var(--ac);"><span style="color:var(--tx2);">Q2</span></label>
+                <label class="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer text-xs hover:bg-blue-50 dark:hover:bg-blue-900/20"><input type="checkbox" value="3" onchange="syncSidebarFilter('quarterNums', this.value, this.checked)" class="cb-quarters rounded" style="accent-color:var(--ac);"><span style="color:var(--tx2);">Q3</span></label>
+                <label class="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer text-xs hover:bg-blue-50 dark:hover:bg-blue-900/20"><input type="checkbox" value="4" onchange="syncSidebarFilter('quarterNums', this.value, this.checked)" class="cb-quarters rounded" style="accent-color:var(--ac);"><span style="color:var(--tx2);">Q4</span></label>
+            </div>
+        </div>
+
+        <div class="relative">
+            <button onclick="toggleDD('dd-rep')" id="dd-rep-btn" class="dd-btn w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium text-left" style="background:var(--bg3);border:1px solid var(--bd);color:var(--tx);">
+                <span id="dd-rep-label">All Sales Reps</span>
+                <svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </button>
+            <div id="dd-rep" class="dropdown-menu mt-1 p-2 space-y-1 rounded-lg shadow-xl" style="background:var(--bg2);border:1px solid var(--bd);bottom:100%; margin-bottom:4px; max-height: 200px; overflow-y: auto;">
+                <label class="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer text-xs hover:bg-blue-50 dark:hover:bg-blue-900/20"><input type="checkbox" value="Sarah Connor" onchange="syncSidebarFilter('reps', this.value, this.checked)" class="cb-reps rounded" style="accent-color:var(--ac);"><span style="color:var(--tx2);">Sarah Connor</span></label>
+                <label class="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer text-xs hover:bg-blue-50 dark:hover:bg-blue-900/20"><input type="checkbox" value="John Doe" onchange="syncSidebarFilter('reps', this.value, this.checked)" class="cb-reps rounded" style="accent-color:var(--ac);"><span style="color:var(--tx2);">John Doe</span></label>
+                <label class="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer text-xs hover:bg-blue-50 dark:hover:bg-blue-900/20"><input type="checkbox" value="Jane Smith" onchange="syncSidebarFilter('reps', this.value, this.checked)" class="cb-reps rounded" style="accent-color:var(--ac);"><span style="color:var(--tx2);">Jane Smith</span></label>
+                <label class="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer text-xs hover:bg-blue-50 dark:hover:bg-blue-900/20"><input type="checkbox" value="Michael Scott" onchange="syncSidebarFilter('reps', this.value, this.checked)" class="cb-reps rounded" style="accent-color:var(--ac);"><span style="color:var(--tx2);">Michael Scott</span></label>
+                <label class="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer text-xs hover:bg-blue-50 dark:hover:bg-blue-900/20"><input type="checkbox" value="Jim Halpert" onchange="syncSidebarFilter('reps', this.value, this.checked)" class="cb-reps rounded" style="accent-color:var(--ac);"><span style="color:var(--tx2);">Jim Halpert</span></label>
+                <label class="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer text-xs hover:bg-blue-50 dark:hover:bg-blue-900/20"><input type="checkbox" value="Dwight Schrute" onchange="syncSidebarFilter('reps', this.value, this.checked)" class="cb-reps rounded" style="accent-color:var(--ac);"><span style="color:var(--tx2);">Dwight Schrute</span></label>
+                <label class="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer text-xs hover:bg-blue-50 dark:hover:bg-blue-900/20"><input type="checkbox" value="Pam Beesly" onchange="syncSidebarFilter('reps', this.value, this.checked)" class="cb-reps rounded" style="accent-color:var(--ac);"><span style="color:var(--tx2);">Pam Beesly</span></label>
+            </div>
+        </div>
+        
+        <div class="relative">
+            <button onclick="toggleDD('dd-region')" id="dd-region-btn" class="dd-btn w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold text-left" style="background:var(--bg3);border:1px solid var(--bd);color:var(--tx);">
+                <span id="dd-region-label">All Regions</span>
+                <svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </button>
+            <div id="dd-region" class="dropdown-menu mt-1 p-2 space-y-1 rounded-lg shadow-xl" style="background:var(--bg2);border:1px solid var(--bd);bottom:100%; margin-bottom:4px;">
+                <label class="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer text-xs hover:bg-blue-50 dark:hover:bg-blue-900/20"><input type="checkbox" value="North America" onchange="syncSidebarFilter('regions', this.value, this.checked)" class="cb-regions rounded" style="accent-color:var(--ac);"><span style="color:var(--tx2);">North America</span></label>
+                <label class="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer text-xs hover:bg-blue-50 dark:hover:bg-blue-900/20"><input type="checkbox" value="EMEA" onchange="syncSidebarFilter('regions', this.value, this.checked)" class="cb-regions rounded" style="accent-color:var(--ac);"><span style="color:var(--tx2);">EMEA</span></label>
+                <label class="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer text-xs hover:bg-blue-50 dark:hover:bg-blue-900/20"><input type="checkbox" value="APAC" onchange="syncSidebarFilter('regions', this.value, this.checked)" class="cb-regions rounded" style="accent-color:var(--ac);"><span style="color:var(--tx2);">APAC</span></label>
+                <label class="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer text-xs hover:bg-blue-50 dark:hover:bg-blue-900/20"><input type="checkbox" value="LATAM" onchange="syncSidebarFilter('regions', this.value, this.checked)" class="cb-regions rounded" style="accent-color:var(--ac);"><span style="color:var(--tx2);">LATAM</span></label>
+            </div>
+        </div>
+        
+        <button onclick="clearAllFilters()" class="w-full py-2 rounded-lg text-xs font-semibold transition-all hover:bg-red-50 dark:hover:bg-red-900/30 hover:text-red-600 hover:border-red-200" style="border:1px solid var(--bd);color:var(--tx3);">Clear All Filters</button>
+    </div>
+</aside>
+
+<main class="flex-1 min-w-0 flex flex-col h-screen overflow-hidden">
+    <header class="flex-shrink-0 sticky top-0 z-30 flex items-center justify-between gap-4 px-4 lg:px-8 py-4" style="background:var(--bg2);border-bottom:1px solid var(--bd);">
+        <div class="flex items-center gap-3">
+            <button onclick="toggleSidebar()" class="lg:hidden p-2 rounded-lg" style="color:var(--tx3);"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+            <div><p class="text-[10px] font-semibold uppercase tracking-widest" style="color:var(--tx3);">Enterprise Revenue Operations</p><h2 id="mainTitle" class="text-lg font-extrabold" style="color:var(--tx);">Executive Summary</h2></div>
+        </div>
+        <div class="flex items-center gap-2">
+            <button onclick="toggleTheme()" class="px-3 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5" style="border:1px solid var(--bd);color:var(--tx2);" title="Toggle Theme">
+                <svg id="iconMoon" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+                <svg id="iconSun" class="w-3.5 h-3.5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            </button>
+            <button onclick="exportCSV()" class="px-3 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5" style="border:1px solid var(--bd);color:var(--tx2); background:var(--bg3);">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>Export CSV</button>
+            <div class="hidden sm:flex items-center gap-2 px-3 py-2 rounded-lg" style="border:1px solid var(--ok); background:rgba(34,197,94,0.05);">
+                <span class="w-2 h-2 rounded-full pulse-glow" style="background:var(--ok);"></span>
+                <span class="text-[10px] font-bold uppercase tracking-wider" style="color:var(--ok);">System Online</span>
+            </div>
+        </div>
+    </header>
+
+    <div class="flex-1 overflow-y-auto p-4 lg:p-8">
+        
+        <!-- Active Filters Bar -->
+        <div id="filterBadges" class="hidden flex-wrap items-center gap-2 mb-4 p-3 rounded-xl" style="background:var(--bg3);border:1px solid var(--bd);">
+            <span class="text-[10px] font-bold uppercase tracking-wider" style="color:var(--tx3);">Active Filters:</span>
+            <div id="badgesList" class="flex flex-wrap gap-2"></div>
+            <button onclick="clearAllFilters()" class="ml-auto text-[10px] font-bold px-2 py-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30" style="color:var(--er); transition:all 0.2s;">✕ Clear All</button>
+        </div>
+
+        <section class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div class="p-4 rounded-xl relative overflow-hidden" style="background:var(--bg2);border:1px solid var(--bd);">
+                <p class="text-[10px] font-bold uppercase tracking-wider" style="color:var(--tx3);">Realized Revenue</p>
+                <h3 class="text-xl lg:text-3xl font-black mt-1" style="color:var(--ac);" id="kpiRevenue">—</h3>
+                <div class="absolute right-0 bottom-0 opacity-10"><svg class="w-16 h-16 -mb-4 -mr-2" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1.41 16.09V20h-2.67v-1.93c-1.71-.36-3.16-1.46-3.27-3.4h1.96c.1 1.05.82 1.87 2.65 1.87 1.96 0 2.4-.98 2.4-1.59 0-.83-.44-1.61-2.67-2.14-2.48-.6-4.18-1.62-4.18-3.67 0-1.72 1.39-2.84 3.11-3.21V4h2.67v1.95c1.86.45 2.79 1.86 2.85 3.39H14.3c-.05-1.11-.64-1.87-2.22-1.87-1.5 0-2.4.68-2.4 1.64 0 .84.65 1.39 2.67 1.91s4.18 1.39 4.18 3.91c-.01 1.83-1.38 2.83-3.12 3.16z"/></svg></div>
+            </div>
+            <div class="p-4 rounded-xl" style="background:var(--bg2);border:1px solid var(--bd);">
+                <p class="text-[10px] font-bold uppercase tracking-wider" style="color:var(--tx3);">Total Transactions</p>
+                <h3 class="text-xl lg:text-3xl font-black mt-1" style="color:var(--in);" id="kpiDeals">—</h3>
+            </div>
+            <div class="p-4 rounded-xl" style="background:var(--bg2);border:1px solid var(--bd);">
+                <p class="text-[10px] font-bold uppercase tracking-wider" style="color:var(--tx3);">Net Realized Profit</p>
+                <h3 class="text-xl lg:text-3xl font-black mt-1" style="color:var(--tx);" id="kpiProfit">—</h3>
+            </div>
+        </section>
+
+        <div id="content-executive" class="tab-content fade-in">
+            <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
+                <!-- Trend Chart with Drilldown -->
+                <div class="p-5 rounded-xl" style="background:var(--bg2);border:1px solid var(--bd);">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                        <div>
+                            <h3 class="text-sm font-bold" style="color:var(--tx);">Revenue & Profit Trend</h3>
+                            <span class="text-[9px] font-bold px-2 py-0.5 rounded" style="background:var(--bg3);color:var(--tx3);">Click point to multi-select</span>
+                        </div>
+                        <div class="flex items-center gap-1 p-1 rounded-lg" style="background:var(--bg3);">
+                            <button onclick="setExecTrend('month')" id="btn-exec-month" class="local-tab-btn active">Monthly</button>
+                            <button onclick="setExecTrend('quarter')" id="btn-exec-quarter" class="local-tab-btn">Quarterly</button>
+                        </div>
+                    </div>
+                    <div style="height:320px;"><canvas id="chartTrend"></canvas></div>
+                </div>
+
+                <!-- Distribution Chart with Drilldown -->
+                <div class="p-5 rounded-xl" style="background:var(--bg2);border:1px solid var(--bd);">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                        <div>
+                            <h3 class="text-sm font-bold" style="color:var(--tx);">Portfolio Distribution</h3>
+                            <span class="text-[9px] font-bold px-2 py-0.5 rounded" style="background:var(--bg3);color:var(--tx3);">Click slice to multi-select</span>
+                        </div>
+                        <div class="flex items-center gap-1 p-1 rounded-lg" style="background:var(--bg3);">
+                            <button onclick="setExecDist('region')" id="btn-dist-region" class="local-tab-btn active">Region</button>
+                            <button onclick="setExecDist('client')" id="btn-dist-client" class="local-tab-btn">Client</button>
+                            <button onclick="setExecDist('rep')" id="btn-dist-rep" class="local-tab-btn">Sales Rep</button>
+                        </div>
+                    </div>
+                    <div style="height:320px;"><canvas id="chartRegion"></canvas></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="content-sales" class="tab-content hidden fade-in">
+            <div class="p-5 rounded-xl mb-6" style="background:var(--bg2);border:1px solid var(--bd);">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                    <div>
+                        <h3 class="text-sm font-bold" style="color:var(--tx);">Performance View</h3>
+                        <span class="text-[9px] font-bold px-2 py-0.5 rounded" style="background:var(--bg3);color:var(--tx3);">Click bar to filter</span>
+                    </div>
+                    <div class="flex items-center gap-1 p-1 rounded-lg" style="background:var(--bg3);">
+                        <button onclick="setSalesView('region')" id="btn-sales-region" class="local-tab-btn">Region</button>
+                        <button onclick="setSalesView('rep')" id="btn-sales-rep" class="local-tab-btn active">Sales Rep</button>
+                        <button onclick="setSalesView('client')" id="btn-sales-client" class="local-tab-btn">Client</button>
+                    </div>
+                </div>
+                <div style="height:400px;"><canvas id="chartSales"></canvas></div>
+            </div>
+        </div>
+
+        <div id="content-efficiency" class="tab-content hidden fade-in">
+            <!-- Efficiency KPIs -->
+            <div class="grid grid-cols-2 gap-4 mb-6">
+                <div class="p-4 rounded-xl flex flex-col justify-center" style="background:var(--bg2);border:1px solid var(--bd);">
+                    <p class="text-[10px] font-bold uppercase tracking-wider" style="color:var(--tx3);">Total Marketing Spend (CAC)</p>
+                    <h3 class="text-2xl font-black mt-1" style="color:var(--wn);" id="kpiTotalCac">—</h3>
+                </div>
+                <div class="p-4 rounded-xl flex flex-col justify-center" style="background:var(--bg2);border:1px solid var(--bd);">
+                    <p class="text-[10px] font-bold uppercase tracking-wider" style="color:var(--tx3);">Avg. ROI (Profit / Spend)</p>
+                    <h3 class="text-2xl font-black mt-1" style="color:var(--in);" id="kpiAvgRoi">—</h3>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
+                <!-- ROI Bubble Chart -->
+                <div class="p-5 rounded-xl" style="background:var(--bg2);border:1px solid var(--bd);">
+                    <div class="flex justify-between items-center mb-2">
+                        <h3 class="text-sm font-bold" style="color:var(--tx);">Channel ROI Overview</h3>
+                        <span class="text-[9px] font-bold px-2 py-0.5 rounded" style="background:var(--bg3);color:var(--tx3);">Click bubble to filter</span>
+                    </div>
+                    <p class="text-xs mb-4" style="color:var(--tx3);">Acquisition Cost (X) vs Net Profit (Y). Size = Deals.</p>
+                    <div style="height:300px;"><canvas id="chartScatter"></canvas></div>
+                </div>
+
+                <!-- Spend vs Profit Bar -->
+                <div class="p-5 rounded-xl" style="background:var(--bg2);border:1px solid var(--bd);">
+                    <div class="flex justify-between items-center mb-2">
+                        <h3 class="text-sm font-bold" style="color:var(--tx);">CAC Spend vs Profit Return</h3>
+                        <span class="text-[9px] font-bold px-2 py-0.5 rounded" style="background:var(--bg3);color:var(--tx3);">Click bar to filter</span>
+                    </div>
+                    <p class="text-xs mb-4" style="color:var(--tx3);">Direct comparison of marketing expense against profit generated.</p>
+                    <div style="height:300px;"><canvas id="chartCacBar"></canvas></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="content-yoy" class="tab-content hidden fade-in">
+            <div class="p-5 rounded-xl" style="background:var(--bg2);border:1px solid var(--bd);">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                    <div>
+                        <h3 class="text-sm font-bold" style="color:var(--tx);" id="yoyTitle">Year-over-Year Analysis</h3>
+                        <span class="text-[9px] font-bold px-2 py-0.5 rounded" style="background:var(--bg3);color:var(--tx3);">Compare Annual Performance</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <div class="flex items-center gap-1 p-1 rounded-lg" style="background:var(--bg3);">
+                            <button onclick="setYoyTime('month')" id="btn-yoy-month" class="local-tab-btn active">Monthly</button>
+                            <button onclick="setYoyTime('quarter')" id="btn-yoy-quarter" class="local-tab-btn">Quarterly</button>
+                        </div>
+                        <div class="w-px h-6 bg-gray-300 dark:bg-slate-600"></div>
+                        <div class="flex items-center gap-1 p-1 rounded-lg" style="background:var(--bg3);">
+                            <button onclick="setYoyBreakdown('overall')" id="btn-yoy-overall" class="local-tab-btn active">Overall</button>
+                            <button onclick="setYoyBreakdown('region')" id="btn-yoy-region" class="local-tab-btn">By Region</button>
+                            <button onclick="setYoyBreakdown('client')" id="btn-yoy-client" class="local-tab-btn">By Client</button>
+                        </div>
+                    </div>
+                </div>
+                <div style="height:400px;"><canvas id="chartYoY"></canvas></div>
+            </div>
+        </div>
+
+        <div id="content-comparison" class="tab-content hidden fade-in">
+            <div class="p-5 rounded-xl" style="background:var(--bg2);border:1px solid var(--bd);">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                    <h3 class="text-sm font-bold" style="color:var(--tx);">Compare Regional Performance</h3>
+                    <div class="flex items-center gap-3">
+                        <select id="compRegion1" class="search-input w-auto" onchange="loadComparison()"></select>
+                        <span class="text-xs" style="color:var(--tx3);">vs</span>
+                        <select id="compRegion2" class="search-input w-auto" onchange="loadComparison()"></select>
+                    </div>
+                </div>
+                <div class="flex items-center justify-end mb-4">
+                    <div class="flex items-center gap-1 p-1 rounded-lg" style="background:var(--bg3);">
+                        <button onclick="setCompTime('month')" id="btn-comp-month" class="local-tab-btn active">Jan - Dec</button>
+                        <button onclick="setCompTime('quarter')" id="btn-comp-quarter" class="local-tab-btn">Q1 - Q4</button>
+                    </div>
+                </div>
+                <div style="height:320px;"><canvas id="chartComparison"></canvas></div>
+            </div>
+            <div class="mt-4 p-5 rounded-xl" style="background:var(--bg2);border:1px solid var(--bd);">
+                <div style="overflow-x:auto;">
+                    <table class="comp-table w-full">
+                        <thead><tr><th>Metric</th><th id="compHeader1">Reg 1</th><th id="compHeader2">Reg 2</th><th>Difference</th></tr></thead>
+                        <tbody id="compTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div id="content-table" class="tab-content hidden fade-in">
+            <div class="p-5 rounded-xl" style="background:var(--bg2);border:1px solid var(--bd);">
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
+                    <h3 class="text-sm font-bold" style="color:var(--tx);">Master Deal Records</h3>
+                    <div class="flex items-center gap-2 w-full md:w-auto">
+                        <input type="text" id="tableSearch" class="search-input flex-1 md:w-64" placeholder="Search client or rep..." onkeypress="if(event.key === 'Enter') applySearch()">
+                        <button onclick="applySearch()" class="px-4 py-2 rounded-lg text-xs font-bold text-white transition-opacity hover:opacity-90" style="background:var(--ac);">Enter</button>
+                    </div>
+                </div>
+                <div class="mb-3 text-right">
+                    <span id="tableTotal" class="text-xs font-semibold px-2 py-1.5 rounded" style="background:var(--bg3);color:var(--tx3);">—</span>
+                </div>
+                <div style="overflow-x:auto; min-height:400px;">
+                    <table class="w-full text-xs" style="border-collapse:separate;border-spacing:0;">
+                        <thead>
+                            <tr style="background:var(--bg3);">
+                                <th class="sortable px-3 py-2 text-left font-bold uppercase tracking-wider" style="color:var(--tx3);" onclick="sortTable('date_raw')">Date <span class="sort-arrow">↕</span></th>
+                                <th class="sortable px-3 py-2 text-left font-bold uppercase tracking-wider" style="color:var(--tx3);" onclick="sortTable('company')">Client <span class="sort-arrow">↕</span></th>
+                                <th class="sortable px-3 py-2 text-left font-bold uppercase tracking-wider" style="color:var(--tx3);" onclick="sortTable('sales_rep')">Sales Rep <span class="sort-arrow">↕</span></th>
+                                <th class="sortable px-3 py-2 text-right font-bold uppercase tracking-wider" style="color:var(--tx3);" onclick="sortTable('revenue')">Gross Rev <span class="sort-arrow">↕</span></th>
+                                <th class="sortable px-3 py-2 text-right font-bold uppercase tracking-wider" style="color:var(--tx3);" onclick="sortTable('profit')">Realized Profit <span class="sort-arrow">↕</span></th>
+                            </tr>
+                        </thead>
+                        <tbody id="tableBody"></tbody>
+                    </table>
+                </div>
+                <div id="tablePagination" class="flex items-center justify-center gap-2 mt-4 flex-wrap"></div>
+            </div>
+        </div>
+
+    </div>
+</main>
+</div>
+
+<script>
+// Safe Sandbox-Friendly Storage Wrapper (MUST BE DECLARED FIRST TO PREVENT TDZ ERORS)
+const safeLocalStorage = {
+    getItem: function(key) {
+        try {
+            return localStorage.getItem(key);
+        } catch (e) {
+            return null;
+        }
+    },
+    setItem: function(key, value) {
+        try {
+            localStorage.setItem(key, value);
+        } catch (e) {
+            // Silently absorb security exception inside sandboxes
+        }
+    }
+};
+
+//// ============================================================================
+// 1. DATA GENERATOR & PRNG
+// ============================================================================
+let isDark = safeLocalStorage.getItem('revops-theme') === 'dark';
+
+function mulberry32(a) {
+    return function() {
+        a |= 0; a = a + 0x6D2B79F5 | 0;
+        var t = Math.imul(a ^ a >>> 15, 1 | a);
+        t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+        return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+}
+function seededRandom(seed) {
+    const rng = mulberry32(seed);
+    return {
+        choice: (arr) => arr[Math.floor(rng() * arr.length)],
+        uniform: (a, b) => a + rng() * (b - a),
+        randint: (min, max) => Math.floor(rng() * (max - min + 1)) + min,
+    };
+}
+
+const PRODUCTS = [
+    { code: "PROD_001", name: "Azure Ent. Suite", cost: 2500, price: 4500 },
+    { code: "PROD_002", name: "AWS Cloud Infra", cost: 4000, price: 7500 },
+    { code: "PROD_003", name: "Google Workspace", cost: 300, price: 800 },
+    { code: "PROD_004", name: "Salesforce Cloud", cost: 1200, price: 2400 },
+    { code: "PROD_005", name: "HubSpot Pro", cost: 600, price: 1300 },
+    { code: "PROD_006", name: "CrowdStrike Sec", cost: 800, price: 1800 },
+    { code: "PROD_007", name: "Snowflake Data", cost: 1500, price: 3200 },
+];
+const COMPANIES = [
+    { name: "Walmart", region: "North America"}, { name: "CVS Health", region: "EMEA"}, 
+    { name: "Berkshire", region: "APAC"}, { name: "Amerisource", region: "LATAM"}, 
+    { name: "Costco", region: "APAC"}, { name: "Microsoft", region: "North America"},
+    { name: "Ford Motor", region: "EMEA"}, { name: "Toyota", region: "APAC"},
+    { name: "Petrobras", region: "LATAM"}, { name: "Unilever", region: "EMEA"}
+];
+const SOURCES = [
+    { name: "LinkedIn Ads", cac: 850 }, { name: "Google SEO", cac: 150 },
+    { name: "Partner Network", cac: 75 }, { name: "Outbound Sales", cac: 500 },
+    { name: "Tech Summit", cac: 1200 },
+];
+const SALES_REPS = ["Sarah Connor", "John Doe", "Jane Smith", "Michael Scott", "Jim Halpert", "Dwight Schrute", "Pam Beesly"];
+
+const START_DATE = new Date(2024, 0, 1);
+const TOTAL_DEALS = 11000;
+const SEED = 42;
+
+// Utility Formatters
+function formatDateToDDMMMYYYY(dateObj) {
+    const d = dateObj.getDate().toString().padStart(2, '0');
+    const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][dateObj.getMonth()];
+    const y = dateObj.getFullYear();
+    return `${d}-${m}-${y}`;
+}
+function getQuarterFromMonth(monthNum) {
+    return Math.ceil(monthNum / 3);
+}
+function fmtMonthYear(ym) {
+    const [y, m] = ym.split('-');
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return `${months[parseInt(m)-1]}-${y.slice(2)}`;
+}
+
+async function generateAllDealsAsync() {
+    const rng = seededRandom(SEED);
+    const deals = [];
+    const progressEl = document.getElementById('genProgress');
+    const textEl = document.getElementById('loadingText');
+    const batchSize = 500; 
+    
+    for (let i = 0; i < TOTAL_DEALS; i += batchSize) {
+        for (let j = 0; j < batchSize && (i + j) < TOTAL_DEALS; j++) {
+            const product = rng.choice(PRODUCTS);
+            const company = rng.choice(COMPANIES);
+            const source = rng.choice(SOURCES);
+            const rep = rng.choice(SALES_REPS);
+            const qty = rng.choice([1, 2, 5, 10, 20]);
+            const randDays = rng.randint(0, 900);
+            
+            const dealDate = new Date(START_DATE);
+            dealDate.setDate(dealDate.getDate() + randDays);
+            
+            const monthNum = dealDate.getMonth() + 1;
+            const yearNum = dealDate.getFullYear();
+            const ym = `${yearNum}-${String(monthNum).padStart(2, '0')}`;
+            const yq = `${yearNum}-Q${getQuarterFromMonth(monthNum)}`;
+            
+            const price = product.price * (1.0 + rng.uniform(-0.1, 0.1));
+            const cost = product.cost * (1.0 + rng.uniform(-0.05, 0.05));
+            
+            const grossRev = Math.round(qty * price);
+            const totalCost = Math.round(qty * cost);
+            const cacValue = source.cac;
+            
+            const realizedOpex = Math.round(grossRev * 0.03); 
+            const realizedProfit = grossRev - totalCost - cacValue - realizedOpex;
+
+            deals.push({
+                date_raw: dealDate.getTime(), // Required for safe sorting
+                date_fmt: formatDateToDDMMMYYYY(dealDate), // For display
+                year: String(yearNum),
+                ym: ym,
+                yq: yq,
+                company_name: company.name, region: company.region, product_name: product.name,
+                sales_rep: rep, source_name: source.name,
+                qty: qty, gross_rev: grossRev, realized_rev: grossRev,
+                cac_value: cacValue, net_profit: realizedProfit
+            });
+        }
+        
+        const pct = Math.round(((i + batchSize) / TOTAL_DEALS) * 100);
+        if (progressEl) progressEl.style.width = Math.min(100, pct) + '%';
+        if (textEl) textEl.textContent = `Processing... ${Math.min(TOTAL_DEALS, i+batchSize).toLocaleString()} of ${TOTAL_DEALS.toLocaleString()} rows`;
+        await new Promise(resolve => setTimeout(resolve, 0)); 
+    }
+    return deals;
+}
+
+//// ============================================================================
+// 2. UNIFIED FILTER ENGINE & STATE
+// ============================================================================
+let ALL_DEALS = [];
+let cachedFilteredDeals = [];
+let charts = {};
+let globalSearch = "";
+
+// UI State for Local Tabs
+let execTrendView = 'month'; 
+let execDistView = 'region'; 
+let salesView = 'rep';       
+let yoyTimeView = 'month';   
+let yoyBreakdown = 'overall'; 
+let compTimeView = 'month';  
+let tableState = { page:1, pageSize:20, sortCol:'date_raw', sortDir:'desc' };
+
+// Centralized state handling multi-select across all charts
+let activeFilters = { years: [], regions: [], sources: [], reps: [], months: [], quarters: [], clients: [], quarterNums: [] };
+
+function syncSidebarFilter(category, value, isChecked) {
+    const arr = activeFilters[category];
+    const idx = arr.indexOf(value);
+    if (isChecked && idx === -1) arr.push(value);
+    else if (!isChecked && idx > -1) arr.splice(idx, 1);
+    executeFilterUpdate();
+}
+
+function toggleFilter(category, value) {
+    const arr = activeFilters[category];
+    const idx = arr.indexOf(value);
+    if (idx > -1) arr.splice(idx, 1); 
+    else arr.push(value);             
+    executeFilterUpdate();
+}
+
+function removeFilter(category, value) {
+    const arr = activeFilters[category];
+    const idx = arr.indexOf(value);
+    if (idx > -1) arr.splice(idx, 1);
+    executeFilterUpdate();
+}
+
+function clearAllFilters() {
+    activeFilters = { years:[], regions:[], sources:[], reps:[], months:[], quarters:[], clients:[], quarterNums:[] };
+    globalSearch = "";
+    const searchEl = document.getElementById('tableSearch');
+    if (searchEl) searchEl.value = "";
+    executeFilterUpdate();
+}
+
+function applySearch() {
+    const searchEl = document.getElementById('tableSearch');
+    if (searchEl) {
+        globalSearch = searchEl.value.toLowerCase().trim();
+    }
+    tableState.page = 1;
+    executeFilterUpdate();
+}
+
+function executeFilterUpdate() {
+    syncSidebarUI();
+    renderBadges();
+    refreshDashboard();
+}
+
+function getFilteredDeals() {
+    return ALL_DEALS.filter(d => {
+        if (globalSearch) {
+            const matchesSearch = d.company_name.toLowerCase().includes(globalSearch) || d.sales_rep.toLowerCase().includes(globalSearch);
+            if (!matchesSearch) return false;
+        }
+        if (activeFilters.years.length && !activeFilters.years.includes(d.year)) return false;
+        if (activeFilters.regions.length && !activeFilters.regions.includes(d.region)) return false;
+        if (activeFilters.sources.length && !activeFilters.sources.includes(d.source_name)) return false;
+        if (activeFilters.reps.length && !activeFilters.reps.includes(d.sales_rep)) return false;
+        if (activeFilters.months.length && !activeFilters.months.includes(d.ym)) return false;
+        if (activeFilters.quarters.length && !activeFilters.quarters.includes(d.yq)) return false;
+        if (activeFilters.clients.length && !activeFilters.clients.includes(d.company_name)) return false;
+        if (activeFilters.quarterNums.length && !activeFilters.quarterNums.includes(d.yq.split('-Q')[1])) return false;
+        return true;
+    });
+}
+
+function refreshDashboard() {
+    cachedFilteredDeals = getFilteredDeals();
+    loadKPIs();   
+    loadCharts(); 
+    loadTable();  
+}
+
+//// ============================================================================
+// 3. UI SYNC & BADGES
+// ============================================================================
+function syncSidebarUI() {
+    const categories = [
+        { cat: 'years', cls: '.cb-years', labelId: 'dd-year-label', defaultTxt: 'All Years', btnId: 'dd-year-btn' },
+        { cat: 'regions', cls: '.cb-regions', labelId: 'dd-region-label', defaultTxt: 'All Regions', btnId: 'dd-region-btn' },
+        { cat: 'reps', cls: '.cb-reps', labelId: 'dd-rep-label', defaultTxt: 'All Sales Reps', btnId: 'dd-rep-btn' },
+        { cat: 'quarterNums', cls: '.cb-quarters', labelId: 'dd-quarter-label', defaultTxt: 'All Quarters', btnId: 'dd-quarter-btn' }
+    ];
+
+    categories.forEach(c => {
+        const arr = activeFilters[c.cat];
+        document.querySelectorAll(c.cls).forEach(cb => { cb.checked = arr.includes(cb.value); });
+        
+        const label = document.getElementById(c.labelId);
+        if (label) {
+            if (arr.length === 0) label.textContent = c.defaultTxt;
+            else if (arr.length <= 2) label.textContent = arr.join(', ');
+            else label.textContent = arr.length + ' Selected';
+        }
+        
+        const btn = document.getElementById(c.btnId);
+        if (btn) btn.classList.toggle('active', arr.length > 0);
+    });
+}
+
+function renderBadges() {
+    const c = document.getElementById('filterBadges');
+    const l = document.getElementById('badgesList');
+    if (!l) return;
+    l.innerHTML = ''; 
+    let hasFilters = false;
+    
+    const catMap = { years: 'Year', regions: 'Region', reps: 'AE', sources: 'Channel', months: 'Month', quarters: 'Quarter', clients: 'Client', quarterNums: 'Qtr' };
+    
+    if (globalSearch) {
+        hasFilters = true;
+        l.appendChild(createBadge('Search', globalSearch, () => { globalSearch=''; const searchEl=document.getElementById('tableSearch'); if (searchEl) searchEl.value=''; executeFilterUpdate(); }));
+    }
+
+    for (const [key, arr] of Object.entries(activeFilters)) {
+        arr.forEach(val => {
+            hasFilters = true;
+            let displayVal = val;
+            if (key === 'months') displayVal = fmtMonthYear(val);
+            if (key === 'quarters') { const [y, q] = val.split('-'); displayVal = `${q}-${y.slice(2)}`; }
+            if (key === 'quarterNums') displayVal = `Q${val}`;
+            l.appendChild(createBadge(catMap[key], displayVal, () => removeFilter(key, val)));
+        });
+    }
+    if (c) {
+        c.classList.toggle('hidden', !hasFilters); 
+        c.classList.toggle('flex', hasFilters);
+    }
+}
+
+function createBadge(type, val, onRemove) {
+    const d = document.createElement('div'); 
+    d.className='flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold text-white cursor-pointer hover:opacity-80 transition-opacity'; 
+    d.style.background='var(--ac)';
+    d.onclick = onRemove; 
+    d.innerHTML=`<span class="opacity-70 text-[9px] uppercase">${type}:</span> <span>${val}</span><button class="ml-1 hover:text-red-200 text-[10px]">✕</button>`;
+    return d;
+}
+
+// Local Tab Controllers
+function setExecTrend(val) {
+    execTrendView = val;
+    document.getElementById('btn-exec-month').className = `local-tab-btn ${val==='month'?'active':''}`;
+    document.getElementById('btn-exec-quarter').className = `local-tab-btn ${val==='quarter'?'active':''}`;
+    loadCharts();
+}
+function setExecDist(val) {
+    execDistView = val;
+    document.getElementById('btn-dist-region').className = `local-tab-btn ${val==='region'?'active':''}`;
+    document.getElementById('btn-dist-client').className = `local-tab-btn ${val==='client'?'active':''}`;
+    document.getElementById('btn-dist-rep').className = `local-tab-btn ${val==='rep'?'active':''}`;
+    loadCharts();
+}
+function setSalesView(val) {
+    salesView = val;
+    document.getElementById('btn-sales-region').className = `local-tab-btn ${val==='region'?'active':''}`;
+    document.getElementById('btn-sales-rep').className = `local-tab-btn ${val==='rep'?'active':''}`;
+    document.getElementById('btn-sales-client').className = `local-tab-btn ${val==='client'?'active':''}`;
+    loadCharts();
+}
+function setYoyTime(val) {
+    yoyTimeView = val;
+    document.getElementById('btn-yoy-month').className = `local-tab-btn ${val==='month'?'active':''}`;
+    document.getElementById('btn-yoy-quarter').className = `local-tab-btn ${val==='quarter'?'active':''}`;
+    loadCharts();
+}
+function setYoyBreakdown(val) {
+    yoyBreakdown = val;
+    document.getElementById('btn-yoy-overall').className = `local-tab-btn ${val==='overall'?'active':''}`;
+    document.getElementById('btn-yoy-region').className = `local-tab-btn ${val==='region'?'active':''}`;
+    document.getElementById('btn-yoy-client').className = `local-tab-btn ${val==='client'?'active':''}`;
+    loadCharts();
+}
+function setCompTime(val) {
+    compTimeView = val;
+    document.getElementById('btn-comp-month').className = `local-tab-btn ${val==='month'?'active':''}`;
+    document.getElementById('btn-comp-quarter').className = `local-tab-btn ${val==='quarter'?'active':''}`;
+    loadCharts();
+}
+
+function initTheme() { if (isDark) document.documentElement.classList.add('dark'); updateThemeUI(); }
+function toggleTheme() { isDark = !isDark; safeLocalStorage.setItem('revops-theme', isDark?'dark':'light'); document.documentElement.classList.toggle('dark', isDark); updateThemeUI(); refreshDashboard(); }
+function updateThemeUI() { document.getElementById('iconMoon').classList.toggle('hidden',isDark); document.getElementById('iconSun').classList.toggle('hidden',!isDark); }
+function toggleSidebar() { document.body.classList.toggle('sidebar-open'); }
+function toggleDD(id) { document.getElementById(id).classList.toggle('open'); }
+
+const TITLES = { executive:'Executive Summary', sales:'Sales Performance', efficiency:'Acquisition Efficiency', yoy:'YoY Trend Analysis', table:'Master Deal Records', comparison:'Region Comparison' };
+function switchTab(name) {
+    document.querySelectorAll('[role="tab"]').forEach(b => { b.setAttribute('aria-selected','false'); b.style.background='transparent'; b.style.color='var(--tx3)'; });
+    const btn = document.getElementById('tab-'+name);
+    if (btn) {
+        btn.setAttribute('aria-selected','true'); btn.style.background='var(--ac)'; btn.style.color='white';
+    }
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+    const c = document.getElementById('content-'+name); 
+    if (c) {
+        c.classList.remove('hidden'); c.classList.add('fade-in');
+    }
+    const headerTitle = document.getElementById('mainTitle');
+    if (headerTitle) headerTitle.textContent = TITLES[name];
+    document.body.classList.remove('sidebar-open');
+    loadCharts(); 
+}
+
+//// ============================================================================
+// 5. KPIs & TOASTS
+// ============================================================================
+function loadKPIs() {
+    const deals = cachedFilteredDeals;
+    let totalRealized = 0, totalProfit = 0, totalCAC = 0;
+    
+    deals.forEach(d => {
+        totalRealized += d.realized_rev;
+        totalProfit += d.net_profit; 
+        totalCAC += d.cac_value;
+    });
+    
+    const kpiRev = document.getElementById('kpiRevenue');
+    if (kpiRev) kpiRev.textContent = '$'+(totalRealized/1e6).toFixed(1)+'M';
+    
+    const kpiDl = document.getElementById('kpiDeals');
+    if (kpiDl) kpiDl.textContent = deals.length.toLocaleString();
+    
+    const kpiPrf = document.getElementById('kpiProfit');
+    if (kpiPrf) kpiPrf.textContent = '$'+(totalProfit/1e6).toFixed(1)+'M';
+
+    const kpiTotalCac = document.getElementById('kpiTotalCac');
+    if (kpiTotalCac) {
+        kpiTotalCac.textContent = '$'+(totalCAC/1e6).toFixed(1)+'M';
+        const roi = totalCAC > 0 ? (totalProfit / totalCAC) : 0;
+        const kpiAvgRoi = document.getElementById('kpiAvgRoi');
+        if (kpiAvgRoi) kpiAvgRoi.textContent = roi.toFixed(1) + 'x';
+    }
+    
+    const rCount = document.getElementById('rowCount');
+    if (rCount) rCount.textContent = deals.length.toLocaleString();
+}
+
+function showToast(message, type = 'info') {
+    const container = document.getElementById('toastContainer') || (() => {
+        const div = document.createElement('div');
+        div.id = 'toastContainer';
+        div.className = 'fixed bottom-4 right-4 z-50 flex flex-col gap-2 pointer-events-none';
+        document.body.appendChild(div);
+        return div;
+    })();
+    
+    const toast = document.createElement('div');
+    toast.className = 'px-4 py-2.5 rounded-lg text-xs font-semibold shadow-lg text-white transition-all duration-300 transform translate-y-2 opacity-0 flex items-center gap-2 pointer-events-auto';
+    toast.style.background = type === 'error' ? 'var(--er)' : (type === 'success' ? 'var(--ok)' : 'var(--ac)');
+    toast.innerHTML = message;
+    
+    container.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.classList.remove('translate-y-2', 'opacity-0');
+    }, 10);
+    
+    setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-2');
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
+// SAFE AND FAILSAFE RECREATION FOR SMOOTHER ANIMATIONS
+function updateOrCreateChart(id, type, data, options) {
+    const ctx = document.getElementById(id);
+    if (!ctx) return;
+    
+    // Destroy previous instance to trigger the beautiful native transition safely
+    if (charts[id]) {
+        charts[id].destroy();
+        delete charts[id];
+    }
+    
+    charts[id] = new Chart(ctx, { type, data, options });
+}
+
+function cleanupHiddenCharts() {
+    Object.keys(charts).forEach(id => {
+        const canvas = document.getElementById(id);
+        if (!canvas || canvas.offsetParent === null) {
+            charts[id].destroy();
+            delete charts[id];
+        }
+    });
+}
+
+//// ============================================================================
+// 6. DYNAMIC INTERACTIVE CHARTS
+// ============================================================================
+function tc() { return isDark ? '#cbd5e1' : '#475569'; } 
+function gc() { return isDark ? '#334155' : '#e2e8f0'; } 
+
+function getChartColor(activeArr, val, baseColor) {
+    if (!activeArr || activeArr.length === 0) return baseColor;
+    if (activeArr.includes(val)) return baseColor;
+    return isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
+}
+
+function buildHighlightOptions(chartType, filterCategory, labelsArrayCallback) {
+    return {
+        responsive:true, maintainAspectRatio:false,
+        onClick: (event, elements, chart) => {
+            if (elements.length > 0) {
+                const idx = elements[0].index;
+                const labels = labelsArrayCallback(chart);
+                if (labels && labels[idx]) {
+                     toggleFilter(filterCategory, labels[idx]);
+                }
+            } else {
+                if (activeFilters[filterCategory] && activeFilters[filterCategory].length > 0) {
+                    activeFilters[filterCategory] = [];
+                    executeFilterUpdate();
+                }
+            }
+        },
+        onHover: (event, elements) => {
+            event.native.target.style.cursor = elements[0] ? 'pointer' : 'default';
+        },
+        plugins: { legend: { labels: { color:tc() } } },
+        scales: chartType === 'pie' || chartType === 'doughnut' ? {} : {
+            x: { grid: { color:gc() }, ticks: { color:tc() } },
+            y: { grid: { color:gc() }, ticks: { color:tc() } }
+        }
+    };
+}
+
+function loadCharts() {
+    cleanupHiddenCharts();
+    const tab = document.querySelector('.tab-content:not(.hidden)')?.id;
+    if (!tab) return;
+
+    if (tab === 'content-executive') {
+        const timeKey = execTrendView === 'quarter' ? 'yq' : 'ym';
+        const filterCat = execTrendView === 'quarter' ? 'quarters' : 'months';
+        
+        let rawFiltersTrend = {...activeFilters, [filterCat]: []};
+        const dealsTrend = ALL_DEALS.filter(d => {
+            if (rawFiltersTrend.years.length && !rawFiltersTrend.years.includes(d.year)) return false;
+            if (rawFiltersTrend.regions.length && !rawFiltersTrend.regions.includes(d.region)) return false;
+            if (rawFiltersTrend.reps.length && !rawFiltersTrend.reps.includes(d.sales_rep)) return false;
+            if (rawFiltersTrend.clients && rawFiltersTrend.clients.length && !rawFiltersTrend.clients.includes(d.company_name)) return false;
+            return true;
+        });
+
+        const map = {};
+        dealsTrend.forEach(d => {
+            const k = d[timeKey];
+            if(!map[k]) map[k] = { rev:0, profit:0 };
+            map[k].rev += d.realized_rev; map[k].profit += d.net_profit;
+        });
+        const keys = Object.keys(map).sort(); 
+        
+        const formattedLabels = keys.map(k => {
+            if (execTrendView === 'quarter') {
+                const [y, q] = k.split('-'); return `${q}-${y.slice(2)}`;
+            }
+            return fmtMonthYear(k);
+        });
+        
+        let trendOpts = buildHighlightOptions('bar', filterCat, () => keys);
+        trendOpts.scales.x.grid.display = false;
+
+        updateOrCreateChart('chartTrend', 'bar', {
+            labels: formattedLabels,
+            datasets: [
+                { 
+                    label:'Revenue', data:keys.map(k=>map[k].rev), type:'line', borderColor:'#3b82f6', borderWidth:2.5, tension:0.3, fill:false,
+                    pointBackgroundColor: keys.map(k => getChartColor(activeFilters[filterCat], k, '#3b82f6')),
+                    pointRadius: keys.map(k => (activeFilters[filterCat].length > 0 && activeFilters[filterCat].includes(k)) ? 6 : 3)
+                },
+                { 
+                    label:'Net Profit', data:keys.map(k=>map[k].profit), 
+                    backgroundColor:keys.map(k => getChartColor(activeFilters[filterCat], k, 'rgba(34,197,94,0.8)')), 
+                    borderRadius:4 
+                }
+            ]
+        }, trendOpts);
+
+        const distCatMap = { 'region': 'regions', 'client': 'clients', 'rep': 'reps' };
+        const distKeyMap = { 'region': 'region', 'client': 'company_name', 'rep': 'sales_rep' };
+        const dCat = distCatMap[execDistView];
+        const dKey = distKeyMap[execDistView];
+        
+        let rawFiltersDist = {...activeFilters, [dCat]: []};
+        const dealsDist = ALL_DEALS.filter(d => {
+            if (rawFiltersDist.years.length && !rawFiltersDist.years.includes(d.year)) return false;
+            if (rawFiltersDist.months.length && !rawFiltersDist.months.includes(d.ym)) return false;
+            if (rawFiltersDist.quarters && rawFiltersDist.quarters.length && !rawFiltersDist.quarters.includes(d.yq)) return false;
+            if (rawFiltersDist.regions && rawFiltersDist.regions.length && !rawFiltersDist.regions.includes(d.region)) return false;
+            if (rawFiltersDist.reps && rawFiltersDist.reps.length && !rawFiltersDist.reps.includes(d.sales_rep)) return false;
+            if (rawFiltersDist.clients && rawFiltersDist.clients.length && !rawFiltersDist.clients.includes(d.company_name)) return false;
+            return true;
+        });
+
+        const rMap = {};
+        dealsDist.forEach(d => { rMap[d[dKey]] = (rMap[d[dKey]]||0) + d.net_profit; });
+        
+        let rKeys = Object.keys(rMap).sort((a,b) => rMap[b] - rMap[a]);
+        if (execDistView === 'client') rKeys = rKeys.slice(0, 10);
+        
+        const baseColors = ['#3b82f6','#10b981','#f59e0b','#8b5cf6', '#ef4444', '#06b6d4', '#ec4899', '#84cc16', '#6366f1', '#14b8a6'];
+        const bgPie = rKeys.map((k,i) => getChartColor(activeFilters[dCat], k, baseColors[i % baseColors.length]));
+
+        let regOpts = buildHighlightOptions('pie', dCat, () => rKeys);
+        regOpts.plugins.legend.position = 'right';
+
+        updateOrCreateChart('chartRegion', 'doughnut', {
+            labels: rKeys,
+            datasets: [{ data: rKeys.map(k=>rMap[k]), backgroundColor: bgPie, borderWidth:0 }]
+        }, regOpts);
+
+    } else if (tab === 'content-sales') {
+        const dimMap = { 'region': 'region', 'rep': 'sales_rep', 'client': 'company_name' };
+        const filterCatMap = { 'region': 'regions', 'rep': 'reps', 'client': 'clients' };
+        const dKey = dimMap[salesView];
+        const fCat = filterCatMap[salesView];
+
+        let rawFiltersSales = {...activeFilters, [fCat]: []};
+        const dealsSales = ALL_DEALS.filter(d => {
+            if (rawFiltersSales.years.length && !rawFiltersSales.years.includes(d.year)) return false;
+            if (rawFiltersSales.regions && rawFiltersSales.regions.length && !rawFiltersSales.regions.includes(d.region)) return false;
+            if (rawFiltersSales.reps && rawFiltersSales.reps.length && !rawFiltersSales.reps.includes(d.sales_rep)) return false;
+            if (rawFiltersSales.clients && rawFiltersSales.clients.length && !rawFiltersSales.clients.includes(d.company_name)) return false;
+            if (rawFiltersSales.months.length && !rawFiltersSales.months.includes(d.ym)) return false;
+            if (rawFiltersSales.quarters && rawFiltersSales.quarters.length && !rawFiltersSales.quarters.includes(d.yq)) return false;
+            return true;
+        });
+
+        const sMap = {};
+        dealsSales.forEach(d => {
+            if(!sMap[d[dKey]]) sMap[d[dKey]] = { rev:0, profit:0 };
+            sMap[d[dKey]].rev += d.realized_rev; sMap[d[dKey]].profit += d.net_profit;
+        });
+        
+        let sKeys = Object.keys(sMap).sort((a,b) => sMap[b].rev - sMap[a].rev);
+        if(salesView === 'client') sKeys = sKeys.slice(0, 15);
+        
+        let sOpts = buildHighlightOptions('bar', fCat, () => sKeys);
+        sOpts.scales.x.grid.display = false;
+        
+        const bgRev = sKeys.map(k => getChartColor(activeFilters[fCat], k, '#3b82f6'));
+        const bgProf = sKeys.map(k => getChartColor(activeFilters[fCat], k, 'rgba(34,197,94,0.8)'));
+
+        updateOrCreateChart('chartSales', 'bar', {
+            labels: sKeys,
+            datasets: [
+                { label:'Revenue', data: sKeys.map(k=>sMap[k].rev), backgroundColor: bgRev, borderRadius:4 },
+                { label:'Profit', data: sKeys.map(k=>sMap[k].profit), backgroundColor: bgProf, borderRadius:4 }
+            ]
+        }, sOpts);
+
+    } else if (tab === 'content-efficiency') {
+        let rawFiltersEff = {...activeFilters, sources: []};
+        const dealsEff = ALL_DEALS.filter(d => {
+            if (rawFiltersEff.years.length && !rawFiltersEff.years.includes(d.year)) return false;
+            if (rawFiltersEff.regions.length && !rawFiltersEff.regions.includes(d.region)) return false;
+            return true;
+        });
+
+        const cMap = {};
+        dealsEff.forEach(d => {
+            if(!cMap[d.source_name]) cMap[d.source_name] = { cac:0, profit:0, count:0 };
+            cMap[d.source_name].cac += d.cac_value; cMap[d.source_name].profit += d.net_profit; cMap[d.source_name].count++;
+        });
+        const cKeys = Object.keys(cMap).sort((a,b) => cMap[b].profit - cMap[a].profit);
+        
+        const scatter = cKeys.map(k => ({ 
+            x: cMap[k].cac/cMap[k].count, y: cMap[k].profit, 
+            r: Math.max(4, Math.min(15, (cMap[k].count / (dealsEff.length || 1)) * 50)),
+            label:k 
+        }));
+        
+        let scatterOpts = buildHighlightOptions('bubble', 'sources', () => cKeys);
+        scatterOpts.plugins.legend.display = false;
+        scatterOpts.plugins.tooltip = { callbacks: { label: c => `${cKeys[c.dataIndex]}` } };
+        scatterOpts.scales = { x:{title:{display:true,text:'Average CAC ($)',color:tc()}, grid:{color:gc()},ticks:{color:tc()}}, y:{title:{display:true,text:'Net Profit Generated',color:tc()}, grid:{color:gc()},ticks:{color:tc()}} };
+
+        const bgBubble = cKeys.map(k => getChartColor(activeFilters.sources, k, 'rgba(245,158,11,0.8)'));
+
+        updateOrCreateChart('chartScatter', 'bubble', {
+            datasets: [{ label:'Channels', data: scatter, backgroundColor: bgBubble, borderColor:'#d97706' }]
+        }, scatterOpts);
+
+        let barOpts = buildHighlightOptions('bar', 'sources', () => cKeys);
+        barOpts.scales.x.grid.display = false;
+        
+        const bgCac = cKeys.map(k => getChartColor(activeFilters.sources, k, '#f87171'));
+        const bgProf = cKeys.map(k => getChartColor(activeFilters.sources, k, '#4ade80'));
+
+        updateOrCreateChart('chartCacBar', 'bar', {
+            labels: cKeys,
+            datasets: [
+                { label:'Total CAC Spend', data: cKeys.map(k=>cMap[k].cac), backgroundColor: bgCac, borderRadius:4 },
+                { label:'Total Net Profit', data: cKeys.map(k=>cMap[k].profit), backgroundColor: bgProf, borderRadius:4 }
+            ]
+        }, barOpts);
+
+    } else if (tab === 'content-yoy') {
+        const timeKey = yoyTimeView === 'quarter' ? 'quarter' : 'month';
+        const filterCat = yoyTimeView === 'quarter' ? 'quarters' : 'months';
+        
+        let rawFiltersYoy = {...activeFilters, months: [], quarters: []};
+        const dealsYoY = ALL_DEALS.filter(d => {
+            if (rawFiltersYoy.years.length && !rawFiltersYoy.years.includes(d.year)) return false;
+            if (rawFiltersYoy.regions.length && !rawFiltersYoy.regions.includes(d.region)) return false;
+            return true;
+        });
+        
+        if (yoyBreakdown === 'overall') {
+            const yrMap = {};
+            dealsYoY.forEach(d => {
+                if (!yrMap[d.year]) yrMap[d.year] = yoyTimeView === 'month' ? Array(12).fill(0) : Array(4).fill(0);
+                let idx;
+                if(yoyTimeView === 'month') idx = parseInt(d.ym.split('-')[1]) - 1;
+                else idx = parseInt(d.yq.split('Q')[1]) - 1;
+                yrMap[d.year][idx] += d.realized_rev;
+            });
+            const years = Object.keys(yrMap).sort();
+            const labels = yoyTimeView === 'month' ? ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'] : ['Q1','Q2','Q3','Q4'];
+            
+            let yoyOpts = buildHighlightOptions('line', filterCat, () => labels);
+
+            const baseColors = ['#94a3b8', '#3b82f6', '#22c55e'];
+            const datasets = years.map((y, yIdx) => {
+                const bCol = baseColors[yIdx % baseColors.length];
+                return {
+                    label: y, data: yrMap[y], 
+                    borderColor: bCol, backgroundColor: 'transparent', borderWidth:3, tension:0.3,
+                    pointBackgroundColor: bCol,
+                    pointRadius: 3
+                };
+            });
+
+            updateOrCreateChart('chartYoY', 'line', { labels: labels, datasets }, yoyOpts);
+            
+        } else {
+            const keyMap = { 'region': 'region', 'client': 'company_name' };
+            const dKey = keyMap[yoyBreakdown];
+            
+            const entSet = new Set();
+            dealsYoY.forEach(d => entSet.add(d[dKey]));
+            let entities = Array.from(entSet);
+            if(yoyBreakdown === 'client') entities = entities.slice(0, 10);
+            
+            const yrMap = {};
+            dealsYoY.forEach(d => {
+                if(!entities.includes(d[dKey])) return;
+                if (!yrMap[d.year]) yrMap[d.year] = {};
+                if (!yrMap[d.year][d[dKey]]) yrMap[d.year][d[dKey]] = 0;
+                yrMap[d.year][d[dKey]] += d.realized_rev;
+            });
+            const years = Object.keys(yrMap).sort();
+            
+            const baseColors = ['#94a3b8', '#3b82f6', '#22c55e'];
+            const datasets = years.map((y, yIdx) => {
+                const bCol = baseColors[yIdx % baseColors.length];
+                return {
+                    label: y, 
+                    data: entities.map(e => yrMap[y][e] || 0), 
+                    backgroundColor: bCol, borderRadius: 4
+                };
+            });
+            
+            let yoyOpts = buildHighlightOptions('bar', yoyBreakdown === 'region' ? 'regions' : 'clients', () => entities);
+            yoyOpts.scales.x.grid.display = false;
+
+            updateOrCreateChart('chartYoY', 'bar', { labels: entities, datasets }, yoyOpts);
+        }
+
+    } else if (tab === 'content-comparison') {
+        loadComparison();
+    }
+}
+
+//// ============================================================================
+// 7. DATA TABLE, SEARCH BUTTON & PAGINATION
+// ============================================================================
+function loadTable() {
+    const tbody = document.getElementById('tableBody');
+    if (!tbody) return;
+    
+    let data = cachedFilteredDeals;
+    
+    const tableTotalLabel = document.getElementById('tableTotal');
+    if (tableTotalLabel) tableTotalLabel.textContent = data.length.toLocaleString() + ' Rows';
+    tableState.total = data.length;
+
+    const col = tableState.sortCol;
+    const dir = tableState.sortDir === 'asc' ? 1 : -1;
+    data.sort((a,b) => {
+        let va, vb;
+        if (col === 'revenue') { va = a.gross_rev; vb = b.gross_rev; }
+        else if (col === 'profit') { va = a.net_profit; vb = b.net_profit; }
+        else if (col === 'company') { va = a.company_name; vb = b.company_name; }
+        else if (col === 'sales_rep') { va = a.sales_rep; vb = b.sales_rep; }
+        else if (col === 'date_raw') { va = a.date_raw; vb = b.date_raw; }
+        else { va = a[col]; vb = b[col]; }
+        
+        if (va === undefined || va === null) return 1;
+        if (vb === undefined || vb === null) return -1;
+
+        if (typeof va === 'string') { va = va.toLowerCase(); vb = vb.toLowerCase(); }
+        return va > vb ? dir : (va < vb ? -dir : 0);
+    });
+
+    const startIdx = (tableState.page - 1) * tableState.pageSize;
+    const pageData = data.slice(startIdx, startIdx + tableState.pageSize);
+
+    if (!pageData.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center py-8" style="color:var(--tx3);">No records found matching filters.</td></tr>';
+    } else {
+        tbody.innerHTML = pageData.map(d => `
+            <tr class="hover:bg-gray-50 dark:hover:bg-slate-800/50 transition-colors">
+                <td class="px-3 py-3" style="color:var(--tx2);">${d.date_fmt}</td>
+                <td class="px-3 py-3 font-semibold" style="color:var(--tx);">${d.company_name}</td>
+                <td class="px-3 py-3">${d.sales_rep}</td>
+                <td class="px-3 py-3 text-right font-medium" style="color:var(--tx);">$${d.gross_rev.toLocaleString()}</td>
+                <td class="px-3 py-3 text-right font-bold" style="color:${d.net_profit >= 0 ? 'var(--ok)' : 'var(--er)'};">$${d.net_profit.toLocaleString()}</td>
+            </tr>
+        `).join('');
+    }
+    renderPagination();
+}
+
+function sortTable(col) {
+    if (tableState.sortCol === col) tableState.sortDir = tableState.sortDir === 'asc' ? 'desc' : 'asc';
+    else { tableState.sortCol = col; tableState.sortDir = 'desc'; }
+    document.querySelectorAll('.sortable .sort-arrow').forEach(a => a.textContent = '↕');
+    const th = document.querySelector(`.sortable[onclick*="'${col}'"]`);
+    if (th) th.querySelector('.sort-arrow').textContent = tableState.sortDir === 'asc' ? '↑' : '↓';
+    tableState.page = 1; loadTable();
+}
+
+function renderPagination() {
+    const el = document.getElementById('tablePagination');
+    if (!el) return;
+    const totalPages = Math.ceil(tableState.total / tableState.pageSize) || 1;
+    const cur = tableState.page;
+    let html = `<button class="pagination-btn" onclick="goToPage(${cur-1})" ${cur<=1?'disabled':''}>‹</button>`;
+    
+    let start = Math.max(1, cur - 2), end = Math.min(totalPages, start + 4);
+    if (end - start < 4) start = Math.max(1, end - 4);
+
+    if (start > 1) html += `<button class="pagination-btn" onclick="goToPage(1)">1</button><span style="color:var(--tx3)">..</span>`;
+    for (let i = start; i <= end; i++) html += `<button class="pagination-btn ${i===cur?'active':''}" onclick="goToPage(${i})">${i}</button>`;
+    if (end < totalPages) html += `<span style="color:var(--tx3)">..</span><button class="pagination-btn" onclick="goToPage(${totalPages})">${totalPages}</button>`;
+    
+    html += `<button class="pagination-btn" onclick="goToPage(${cur+1})" ${cur>=totalPages?'disabled':''}>›</button>`;
+    el.innerHTML = html;
+}
+function goToPage(n) { tableState.page = n; loadTable(); }
+
+//// ============================================================================
+// 8. EXPORT & COMPARISONS
+// ============================================================================
+function exportCSV() {
+    const deals = cachedFilteredDeals;
+    if (!deals.length) {
+        showToast('No records to export!', 'error');
+        return;
+    }
+    const headers = ['Date','Year','Quarter','Company','Region','Product','Sales Rep','Source','Gross Rev','CAC','Net Profit'];
+    let csv = headers.join(',') + '\n';
+    deals.forEach((d) => {
+        const row = [ d.date_fmt, d.year, d.yq, d.company_name, d.region, d.product_name, d.sales_rep, d.source_name, d.gross_rev, d.cac_value, d.net_profit ];
+        csv += row.map(v => { const s = String(v); return s.includes(',') || s.includes('"') ? '"'+s.replace(/"/g,'""')+'"' : s; }).join(',') + '\n';
+    });
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'revops_export.csv'; a.click(); URL.revokeObjectURL(url);
+    showToast('Dataset exported successfully!', 'success');
+}
+
+function escHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+function loadComparison() { 
+    let rawFiltersComp = {...activeFilters, regions: []};
+    const dealsComp = ALL_DEALS.filter(d => {
+        if (rawFiltersComp.years.length && !rawFiltersComp.years.includes(d.year)) return false;
+        if (rawFiltersComp.sources.length && !rawFiltersComp.sources.includes(d.source_name)) return false;
+        return true;
+    });
+
+    const compareEl1 = document.getElementById('compRegion1');
+    const compareEl2 = document.getElementById('compRegion2');
+    if (!compareEl1 || !compareEl2) return;
+
+    const uniqueRegions = Array.from(new Set(ALL_DEALS.map(d=>d.region))).sort();
+    if (compareEl1.options.length === 0) {
+        const allOpt = '<option value="__all">All Regions</option>';
+        const regionOpts = uniqueRegions.map(r => `<option value="${escHtml(r)}">${escHtml(r)}</option>`).join('');
+        compareEl1.innerHTML = allOpt + regionOpts; 
+        compareEl2.innerHTML = allOpt + regionOpts;
+        compareEl1.value = uniqueRegions[0] || ''; 
+        compareEl2.value = uniqueRegions[1] || '__all';
+    }
+
+    const sel1 = compareEl1.value;
+    const sel2 = compareEl2.value;
+    
+    const map1 = Array(compTimeView === 'month' ? 12 : 4).fill().map(()=>({rev:0, profit:0}));
+    const map2 = Array(compTimeView === 'month' ? 12 : 4).fill().map(()=>({rev:0, profit:0}));
+
+    dealsComp.forEach(d => {
+        const mIdx = parseInt(d.ym.split('-')[1]) - 1;
+        const qIdx = parseInt(d.yq.split('Q')[1]) - 1;
+        const idx = compTimeView === 'month' ? mIdx : qIdx;
+
+        if (d.region === sel1 || sel1 === '__all') {
+            map1[idx].rev += d.realized_rev; map1[idx].profit += d.net_profit;
+        }
+        if (d.region === sel2 || sel2 === '__all') {
+            map2[idx].rev += d.realized_rev; map2[idx].profit += d.net_profit;
+        }
+    });
+
+    const labels = compTimeView === 'month' ? ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'] : ['Q1','Q2','Q3','Q4'];
+
+    let datasets = [];
+    if (sel1 !== '__all' || sel2 === '__all') datasets.push({ label: `${sel1 === '__all' ? 'Global' : sel1} (Revenue)`, data: map1.map(m=>m.rev), backgroundColor: '#3b82f6', borderRadius: 4 });
+    if (sel2 !== '__all' && sel2 !== sel1) datasets.push({ label: `${sel2} (Revenue)`, data: map2.map(m=>m.rev), backgroundColor: '#22c55e', borderRadius: 4 });
+
+    updateOrCreateChart('chartComparison', 'bar', { labels: labels, datasets }, { responsive:true, maintainAspectRatio:false, plugins:{legend:{labels:{color:tc()}}}, scales:{x:{grid:{display:false},ticks:{color:tc()}},y:{grid:{color:gc()},ticks:{color:tc()}}} });
+    
+    const totalMap = {
+        r1: {rev: map1.reduce((sum,m)=>sum+m.rev,0), prof: map1.reduce((sum,m)=>sum+m.profit,0)},
+        r2: {rev: map2.reduce((sum,m)=>sum+m.rev,0), prof: map2.reduce((sum,m)=>sum+m.profit,0)}
+    };
+
+    document.getElementById('compHeader1').textContent = sel1 === '__all' ? 'All Regions' : sel1;
+    document.getElementById('compHeader2').textContent = sel2 === '__all' ? 'All Regions' : (sel2 === sel1 ? 'Same Region ⚠️' : sel2);
+    
+    const metrics = ['Revenue', 'Profit'];
+    const compTableBody = document.getElementById('compTableBody');
+    if (compTableBody) {
+        const sameRegion = (sel1 === sel2);
+        compTableBody.innerHTML = metrics.map((metric) => {
+            const key = metric === 'Revenue' ? 'rev' : 'prof';
+            const v1 = totalMap.r1[key];
+            const v2 = totalMap.r2[key];
+            const diff = v2 - v1;
+            const fmt = v => Math.abs(v)>=1e6 ? '$'+(v/1e6).toFixed(2)+'M' : (Math.abs(v)>=1e3 ? '$'+(v/1e3).toFixed(1)+'K' : '$'+v.toFixed(0));
+            const diffCell = sameRegion ? '<td style="color:var(--tx3);">—</td>' : `<td style="color:${diff>=0?'var(--ok)':'var(--er)'};">${diff>=0?'+':''}${fmt(diff)}</td>`;
+            return `<tr><td style="font-weight:600;color:var(--tx);">${escHtml(metric)}</td><td>${fmt(v1)}</td><td>${fmt(v2)}</td>${diffCell}</tr>`;
+        }).join('');
+    }
+}
+
+//// ============================================================================
+// 9. INITIALIZATION
+// ============================================================================
+window.onload = async function() {
+    initTheme();
+    
+    // Jalankan mesin data secara Asinkron (Non-Blocking)
+    ALL_DEALS = await generateAllDealsAsync();
+    
+    // Transisi Halus
+    const overlay = document.getElementById('loadingOverlay');
+    if (overlay) {
+        overlay.style.opacity = '0';
+        setTimeout(() => {
+            overlay.classList.add('hidden');
+            refreshDashboard(); 
+        }, 500);
+    } else {
+        refreshDashboard();
+    }
+};
+</script>
+</body>
+</html>
